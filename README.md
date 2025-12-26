@@ -40,7 +40,7 @@ Automatiser l’enregistrement des présences à l’aide de la biométrie (empr
 - **Établissement :** École Normale Supérieure (ENS) de Meknès
 - **Encadrant :** Pr. Omari Slimane
 
-## 👤 Auteur
+## Auteur
 
 **Bouba Ahmed**
 
