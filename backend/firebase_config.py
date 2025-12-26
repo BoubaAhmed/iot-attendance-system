@@ -1,3 +1,4 @@
+# firebase_config.py
 import firebase_admin
 from firebase_admin import credentials, db
 import json
@@ -41,16 +42,30 @@ class FirebaseConfig:
     def get_all(self, path):
         """Récupérer toutes les données d'un chemin"""
         try:
-            data = self.get_ref(path).get()
-            return data or {}
+            ref = self.get_ref(path)
+            data = ref.get()
+            return data if data is not None else {}
         except Exception as e:
             print(f"⚠️ Erreur récupération {path}: {e}")
             return {}
     
-    def get_one(self, path, key):
+    def get_one(self, path, key=None):
         """Récupérer un élément spécifique"""
         try:
-            return self.get_ref(f"{path}/{key}").get()
+            ref = self.get_ref(path)
+            data = ref.get()
+            
+            if key:
+                # If it's a list (like students), search by key
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict) and str(item.get('fingerprint_id')) == str(key):
+                            return item
+                    return None
+                # If it's a dict, return the value
+                return data.get(key) if data else None
+            
+            return data
         except Exception as e:
             print(f"⚠️ Erreur récupération {path}/{key}: {e}")
             return None
@@ -58,21 +73,44 @@ class FirebaseConfig:
     def create(self, path, data, key=None):
         """Créer une nouvelle entrée"""
         try:
+            ref = self.get_ref(path)
+            
             if key:
-                self.get_ref(f"{path}/{key}").set(data)
+                ref.child(key).set(data)
                 return key
             else:
-                new_ref = self.get_ref(path).push()
-                new_ref.set(data)
-                return new_ref.key
+                # If path exists and is a list, append to it
+                existing_data = ref.get()
+                if isinstance(existing_data, list):
+                    existing_data.append(data)
+                    ref.set(existing_data)
+                    return len(existing_data) - 1
+                else:
+                    # Create as new array
+                    ref.set([data])
+                    return 0
         except Exception as e:
             print(f"⚠️ Erreur création {path}: {e}")
             raise
     
     def update(self, path, key, data):
-        """Mettre à jour une entrée"""
+        """Mettre à jour une entrée existante"""
         try:
-            self.get_ref(f"{path}/{key}").update(data)
+            ref = self.get_ref(path)
+            existing_data = ref.get()
+            
+            if isinstance(existing_data, list):
+                # Find and update item in list
+                for i, item in enumerate(existing_data):
+                    if isinstance(item, dict) and str(item.get('fingerprint_id')) == str(key):
+                        existing_data[i].update(data)
+                        ref.set(existing_data)
+                        return True
+                return False
+            else:
+                # Update in dictionary
+                ref.child(key).update(data)
+                return True
         except Exception as e:
             print(f"⚠️ Erreur mise à jour {path}/{key}: {e}")
             raise
@@ -80,10 +118,44 @@ class FirebaseConfig:
     def delete(self, path, key):
         """Supprimer une entrée"""
         try:
-            self.get_ref(f"{path}/{key}").delete()
+            ref = self.get_ref(path)
+            existing_data = ref.get()
+            
+            if isinstance(existing_data, list):
+                # Remove item from list
+                new_data = []
+                for item in existing_data:
+                    if isinstance(item, dict) and str(item.get('fingerprint_id')) != str(key):
+                        new_data.append(item)
+                ref.set(new_data)
+            else:
+                ref.child(key).delete()
         except Exception as e:
             print(f"⚠️ Erreur suppression {path}/{key}: {e}")
             raise
+    
+    def update_at_path(self, path, data):
+        """Update at specific path"""
+        try:
+            ref = self.get_ref(path)
+            ref.update(data)
+        except Exception as e:
+            print(f"⚠️ Erreur mise à jour {path}: {e}")
+            raise
+    
+    def delete_at_path(self, path):
+        """Delete at specific path"""
+        try:
+            ref = self.get_ref(path)
+            ref.delete()
+        except Exception as e:
+            print(f"⚠️ Erreur suppression {path}: {e}")
+            raise
+    
+    def get_at_path(self, path):
+        """Get data at specific path"""
+        ref = self.get_ref(path)
+        return ref.get()
 
 # Instance globale
 firebase = FirebaseConfig()
