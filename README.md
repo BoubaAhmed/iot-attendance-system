@@ -23,22 +23,19 @@ Automatiser l’enregistrement des présences à l’aide de la biométrie (empr
 ## 📁 Structure du projet
 ```
 
-├── esp32/          # Code ESP32 (IoT & capteurs)
+├── Captures/          # Captures d'ecran
 ├── backend/        # API Flask
 ├── frontend/       # Interface React
 └── README.md
 
 ```
-
 ## 🎓 Cadre académique
-- **Master :** Systèmes intelligents pour l’éducation  
-- **Établissement :** École Normale Supérieure (ENS) de Meknès  
-- **Encadrant :** Pr. Omari Slimane  
+- **Master :** Systèmes intelligents pour l’éducation
+- **Établissement :** École Normale Supérieure (ENS) de Meknès
+- **Encadrant :** Pr. Omari Slimane
 
 ## 👤 Auteur
 **Bouba Ahmed**
 
 ---
-
 ✨ *Projet réalisé dans un cadre académique à des fins pédagogiques.*
-```
