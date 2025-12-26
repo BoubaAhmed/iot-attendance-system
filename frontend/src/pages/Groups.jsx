@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { groupAPI, studentAPI } from '../api/api';
+// import { groupAPI, studentAPI } from '../api/api';
 import { listenToGroups, listenToStudents } from '../firebase/firebase';
 import { 
   FiUsers,
@@ -19,6 +19,8 @@ import {
   FiUser,
   FiBook
 } from 'react-icons/fi';
+import groupAPI from '../api/groupsApi';
+import studentAPI from '../api/studentsApi';
 
 const Groups = () => {
   const [groups, setGroups] = useState([]);

@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { attendanceAPI, sessionAPI, roomAPI, studentAPI } from '../api/api';
-import { listenToSessions, listenToAttendance } from '../firebase/firebase';
-import { 
+import React, { useState, useEffect } from 'react';
+import sessionAPI from '../api/sessionsApi';
+import roomAPI from '../api/roomsApi';
+import studentAPI from '../api/studentsApi';
+import attendanceAPI from '../api/attendanceApi';
+import LoadingSpinner from '../components/LoadingSpinner';
+import {
   FiBarChart2,
   FiCalendar,
   FiClock,
@@ -25,121 +28,104 @@ import {
   FiEye,
   FiEyeOff,
   FiBook,
-  FiUserPlus
+  FiUserPlus,
+  FiCheckCircle,
+  FiXCircle,
+  FiTarget,
+  FiZap,
+  FiSearch
 } from 'react-icons/fi';
+import { toast } from 'react-toastify';
 
 const Attendance = () => {
-  const [attendanceData, setAttendanceData] = useState({});
+  const [attendanceData, setAttendanceData] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedRoom, setSelectedRoom] = useState('');
+  const [selectedRoom, setSelectedRoom] = useState('all');
+  const [selectedGroup, setSelectedGroup] = useState('all');
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [rooms, setRooms] = useState([]);
-  const [methodFilter, setMethodFilter] = useState('all');
+  const [groups, setGroups] = useState([]);
+  const [students, setStudents] = useState([]);
   const [expandedSessions, setExpandedSessions] = useState({});
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [studentsMap, setStudentsMap] = useState({});
-  const [groupsMap, setGroupsMap] = useState({});
-
-  // Fonction pour générer les sessions pour la date sélectionnée
-  const generateSessions = useCallback(async () => {
-    try {
-      await sessionAPI.generate(selectedDate);
-    } catch (error) {
-      console.error('Erreur génération sessions:', error);
-    }
-  }, [selectedDate]);
+  const [viewMode, setViewMode] = useState('sessions'); // 'sessions' or 'attendance'
 
   useEffect(() => {
     fetchData();
-    setupRealtimeListeners();
-    
-    // Générer automatiquement les sessions pour aujourd'hui
-    const today = new Date().toISOString().split('T')[0];
-    if (selectedDate === today) {
-      generateSessions();
-    }
-  }, [selectedDate, selectedRoom, statusFilter, generateSessions]);
+  }, [selectedDate, selectedRoom, selectedGroup, viewMode]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Récupérer les salles
-      const roomsResponse = await roomAPI.getAll();
-      if (roomsResponse.data.success) {
-        const roomsData = roomsResponse.data.data || {};
-        const roomsArray = Object.values(roomsData).map(room => ({
-          id: room.id || room._id,
-          name: room.name
-        }));
+      // Fetch rooms
+      const roomsRes = await roomAPI.getAll();
+      if (roomsRes.data.success) {
+        const roomsArray = Object.entries(roomsRes.data.data || {}).map(([id, data]) => ({
+          id,
+          ...data
+        })).filter(room => room.active !== false);
         setRooms(roomsArray);
       }
 
-      // Récupérer les étudiants
-      const studentsResponse = await studentAPI.getAll();
-      if (studentsResponse.data.success) {
-        setStudentsMap(studentsResponse.data.data || {});
+      // Fetch students
+      const studentsRes = await studentAPI.getAll();
+      if (studentsRes.data.success) {
+        const studentsArray = Object.entries(studentsRes.data.data || {}).map(([id, data]) => ({
+          id,
+          ...data
+        }));
+        setStudents(studentsArray);
+        
+        // Extract unique groups from students
+        const uniqueGroups = [...new Set(studentsArray.map(student => student.group).filter(Boolean))];
+        setGroups(uniqueGroups);
       }
 
-      // Récupérer les groupes
-      const groupsResponse = await studentAPI.getAll(); // Note: devrait être groupAPI.getAll()
-      if (groupsResponse.data.success) {
-        const groups = {};
-        Object.values(studentsResponse.data.data || {}).forEach(student => {
-          if (student.group) {
-            groups[student.group] = groups[student.group] || [];
-            groups[student.group].push(student);
-          }
-        });
-        setGroupsMap(groups);
-      }
-
-      // Récupérer les sessions pour la date sélectionnée
+      // Fetch sessions for the selected date
       const sessionsParams = { date: selectedDate };
-      if (selectedRoom) sessionsParams.room = selectedRoom;
-      if (statusFilter !== 'all') sessionsParams.status = statusFilter;
+      const sessionsRes = await sessionAPI.getAll(sessionsParams);
       
-      const sessionsResponse = await sessionAPI.getAll(sessionsParams);
-      
-      if (sessionsResponse.data.success) {
-        const sessionsData = sessionsResponse.data.data;
+      if (sessionsRes.data.success) {
+        const sessionsData = sessionsRes.data.data || {};
         let sessionsArray = [];
         
         if (Array.isArray(sessionsData)) {
           sessionsArray = sessionsData;
-        } else if (sessionsData) {
+        } else {
           sessionsArray = Object.entries(sessionsData).map(([id, data]) => ({
             id,
             ...data
           }));
         }
+
+        // Filter by room if selected
+        let filteredSessions = sessionsArray;
+        if (selectedRoom !== 'all') {
+          filteredSessions = sessionsArray.filter(session => session.room === selectedRoom);
+        }
+
+        setSessions(filteredSessions);
+
+        // Fetch attendance data
+        const attendanceRes = await attendanceAPI.getAll({ date: selectedDate });
         
-        setSessions(sessionsArray);
-        
-        // Récupérer les présences pour ces sessions
-        const attendanceParams = { date: selectedDate };
-        if (selectedRoom) attendanceParams.room = selectedRoom;
-        
-        const attendanceResponse = await attendanceAPI.getAll(attendanceParams);
-        
-        if (attendanceResponse.data.success) {
-          const attendanceData = attendanceResponse.data.data || {};
+        if (attendanceRes.data.success) {
+          let attendanceArray = attendanceRes.data.data || [];
           
-          // S'assurer que chaque session a des données d'attendance même vides
-          sessionsArray.forEach(session => {
-            if (!attendanceData[session.id]) {
-              attendanceData[session.id] = {};
-            }
-          });
-          
-          setAttendanceData(attendanceData);
-          calculateStats(sessionsArray, attendanceData);
+          // Filter by group if selected
+          if (selectedGroup !== 'all') {
+            attendanceArray = attendanceArray.filter(record => record.group === selectedGroup);
+          }
+
+          setAttendanceData(attendanceArray);
+          calculateStats(filteredSessions, attendanceArray);
         }
       }
     } catch (error) {
       console.error('Erreur chargement données:', error);
-      setAttendanceData({});
+      toast.error('Impossible de charger les données');
+      setAttendanceData([]);
       setSessions([]);
       setStats(null);
     } finally {
@@ -147,133 +133,96 @@ const Attendance = () => {
     }
   };
 
-  const setupRealtimeListeners = () => {
-    // Écouter les sessions en temps réel
-    const unsubscribeSessions = listenToSessions(selectedDate, selectedRoom, (sessionsData) => {
-      setSessions(sessionsData);
-    });
-
-    // Écouter les présences en temps réel
-    const unsubscribeAttendance = listenToAttendance(selectedDate, null, (newAttendanceData) => {
-      setAttendanceData(prev => ({ ...prev, ...newAttendanceData }));
-      calculateStats(sessions, { ...attendanceData, ...newAttendanceData });
-    });
-
-    return () => {
-      unsubscribeSessions();
-      unsubscribeAttendance();
-    };
-  };
-
-  const calculateStats = (sessionsList, attendance) => {
-    let totalPresent = 0;
-    let totalAbsent = 0;
-    let byRoom = {};
-    let byMethod = { RFID: 0, FINGERPRINT: 0 };
-    let byStatus = { OPEN: 0, CLOSED: 0 };
-    let bySubject = {};
-    
-    // Calculer les statistiques par session
-    sessionsList.forEach(session => {
-      const sessionId = session.id;
-      const roomName = session.room_name || session.room;
-      const subject = session.subject || 'Non spécifié';
-      const sessionAttendance = attendance[sessionId] || {};
-      
-      // Statistiques par statut de session
-      const status = session.status || 'OPEN';
-      byStatus[status] = (byStatus[status] || 0) + 1;
-      
-      // Statistiques par salle
-      if (!byRoom[roomName]) {
-        byRoom[roomName] = { present: 0, absent: 0, total: 0 };
-      }
-      
-      // Statistiques par matière
-      if (!bySubject[subject]) {
-        bySubject[subject] = { present: 0, absent: 0, total: 0 };
-      }
-      
-      // Compter les présences et absences dans cette session
-      Object.values(sessionAttendance).forEach(studentAttendance => {
-        if (studentAttendance.status === 'PRESENT') {
-          totalPresent++;
-          byRoom[roomName].present++;
-          bySubject[subject].present++;
-          
-          // Méthode d'authentification
-          const method = studentAttendance.method;
-          if (method === 'RFID') {
-            byMethod.RFID++;
-          } else if (method === 'FINGERPRINT') {
-            byMethod.FINGERPRINT++;
-          }
-        } else if (studentAttendance.status === 'ABSENT') {
-          totalAbsent++;
-          byRoom[roomName].absent++;
-          bySubject[subject].absent++;
-        }
-      });
-      
-      byRoom[roomName].total = byRoom[roomName].present + byRoom[roomName].absent;
-      bySubject[subject].total = bySubject[subject].present + bySubject[subject].absent;
-    });
-    
+  const calculateStats = (sessionsList, attendanceRecords) => {
+    // Count presents and absents
+    const totalPresent = attendanceRecords.filter(record => record.status === 'PRESENT').length;
+    const totalAbsent = attendanceRecords.filter(record => record.status === 'ABSENT').length;
     const totalStudents = totalPresent + totalAbsent;
     const attendanceRate = totalStudents > 0 ? (totalPresent / totalStudents) * 100 : 0;
-    
+
+    // Count by room
+    const byRoom = {};
+    attendanceRecords.forEach(record => {
+      const roomName = record.room || 'Inconnue';
+      if (!byRoom[roomName]) {
+        byRoom[roomName] = { present: 0, absent: 0 };
+      }
+      if (record.status === 'PRESENT') {
+        byRoom[roomName].present++;
+      } else {
+        byRoom[roomName].absent++;
+      }
+    });
+
+    // Count by group
+    const byGroup = {};
+    attendanceRecords.forEach(record => {
+      const groupName = record.group_name || record.group || 'Inconnu';
+      if (!byGroup[groupName]) {
+        byGroup[groupName] = { present: 0, absent: 0 };
+      }
+      if (record.status === 'PRESENT') {
+        byGroup[groupName].present++;
+      } else {
+        byGroup[groupName].absent++;
+      }
+    });
+
+    // Sessions status
+    const openSessions = sessionsList.filter(session => session.status === 'OPEN').length;
+    const closedSessions = sessionsList.filter(session => session.status === 'CLOSED').length;
+
     setStats({
       totalPresent,
       totalAbsent,
       totalStudents,
       attendanceRate: attendanceRate.toFixed(1),
       byRoom,
-      byMethod,
-      byStatus,
-      bySubject,
-      openSessions: byStatus.OPEN || 0,
-      closedSessions: byStatus.CLOSED || 0
+      byGroup,
+      openSessions,
+      closedSessions,
+      totalSessions: sessionsList.length
     });
   };
 
-  const handleDateChange = (e) => {
-    setSelectedDate(e.target.value);
+  const handleGenerateSessions = async () => {
+    try {
+      await sessionAPI.generate(selectedDate);
+      toast.success('Sessions générées avec succès');
+      fetchData();
+    } catch (error) {
+      console.error('Erreur génération sessions:', error);
+      toast.error('Erreur lors de la génération des sessions');
+    }
   };
 
-  const handleRoomChange = (e) => {
-    setSelectedRoom(e.target.value);
+  const handleCloseSession = async (sessionId) => {
+    try {
+      await sessionAPI.close(sessionId);
+      toast.success('Session fermée avec succès');
+      fetchData();
+    } catch (error) {
+      console.error('Erreur fermeture session:', error);
+      toast.error('Erreur lors de la fermeture de la session');
+    }
   };
 
-  const toggleSession = (sessionId) => {
-    setExpandedSessions(prev => ({
-      ...prev,
-      [sessionId]: !prev[sessionId]
-    }));
-  };
-
-  const handleExportJSON = () => {
-    const dataStr = JSON.stringify(attendanceData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `presences_${selectedDate}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleAutoClose = async () => {
+    try {
+      await sessionAPI.autoClose();
+      toast.success('Sessions terminées fermées avec succès');
+      fetchData();
+    } catch (error) {
+      console.error('Erreur fermeture automatique:', error);
+      toast.error('Erreur lors de la fermeture automatique');
+    }
   };
 
   const handleExportCSV = () => {
-    let csvContent = "ID Session,Salle,Groupe,Matière,Début,Fin,ID Étudiant,Nom,Statut,Méthode,Heure\n";
+    let csvContent = "Date,Heure,Salle,Groupe,Étudiant,Statut,Méthode\n";
     
-    sessions.forEach(session => {
-      const sessionAttendance = attendanceData[session.id] || {};
-      const roomName = session.room_name || session.room;
-      
-      Object.entries(sessionAttendance).forEach(([studentId, attendance]) => {
-        const studentInfo = studentsMap[studentId] || {};
-        csvContent += `"${session.id}","${roomName}","${session.group || ''}","${session.subject || ''}","${session.start || ''}","${session.end || ''}","${studentId}","${studentInfo.name || 'Inconnu'}","${attendance.status || 'N/A'}","${attendance.method || 'N/A'}","${attendance.time || ''}"\n`;
-      });
+    attendanceData.forEach(record => {
+      csvContent += `"${record.date}","${record.created_at?.split('T')[1]?.substring(0, 8) || ''}","${record.room || ''}","${record.group_name || record.group || ''}","${record.student_name || ''}","${record.status}","${record.method || 'FINGERPRINT'}"\n`;
     });
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -284,15 +233,14 @@ const Attendance = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    toast.success('Export CSV réussi');
   };
 
-  const handleCloseSession = async (sessionId) => {
-    try {
-      await sessionAPI.close(sessionId);
-      fetchData();
-    } catch (error) {
-      console.error('Erreur fermeture session:', error);
-    }
+  const toggleSession = (sessionId) => {
+    setExpandedSessions(prev => ({
+      ...prev,
+      [sessionId]: !prev[sessionId]
+    }));
   };
 
   const formatDate = (dateString) => {
@@ -305,159 +253,265 @@ const Attendance = () => {
     });
   };
 
-  const formatSessionTime = (start, end) => {
-    return `${start} - ${end}`;
-  };
-
-  const getStudentName = (studentId) => {
-    const student = studentsMap[studentId];
-    return student ? student.name : studentId;
-  };
-
-  const getStudentGroup = (studentId) => {
-    const student = studentsMap[studentId];
-    return student ? student.group : 'N/A';
+  const formatTime = (timeString) => {
+    if (!timeString) return '';
+    return new Date(timeString).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement des présences...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
-  const totalPresent = stats?.totalPresent || 0;
-  const totalAbsent = stats?.totalAbsent || 0;
-  const totalStudents = stats?.totalStudents || 0;
-  const attendanceRate = stats?.attendanceRate || '0';
-  const rfidCount = stats?.byMethod?.RFID || 0;
-  const fingerprintCount = stats?.byMethod?.FINGERPRINT || 0;
-  const openSessions = stats?.openSessions || 0;
-  const closedSessions = stats?.closedSessions || 0;
-
   return (
-    <div className="w-full">
+    <div className="min-h-screen bg-transparent text-gray-800">
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+      <div className="max-w-7xl mx-auto mb-8">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestion des présences</h1>
-            <p className="text-gray-600 mt-1">Système automatisé basé sur l'emploi du temps</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+              Gestion des présences
+            </h1>
+            <p className="text-gray-600">
+              Suivi en temps réel des présences via empreintes digitales
+            </p>
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              onClick={generateSessions}
-              className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              <FiRefreshCw className="h-4 w-4" />
-              Générer sessions
-            </button>
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={fetchData}
-              className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow text-gray-700"
             >
               <FiRefreshCw className="h-4 w-4" />
               Actualiser
             </button>
             <button
-              onClick={handleExportCSV}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              onClick={handleGenerateSessions}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg"
             >
-              <FiDownload className="h-5 w-5" />
+              <FiPlayCircle className="h-4 w-4" />
+              Générer sessions
+            </button>
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg"
+            >
+              <FiDownload className="h-4 w-4" />
               Exporter CSV
             </button>
           </div>
         </div>
 
         {/* Date Display */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center">
-              <FiCalendar className="h-5 w-5 text-blue-600 mr-3" />
-              <div>
-                <h3 className="font-medium text-blue-900">Données du {formatDate(selectedDate)}</h3>
-                <p className="text-sm text-blue-700">
-                  {sessions.length} session{sessions.length !== 1 ? 's' : ''} • {totalPresent} présent{totalPresent !== 1 ? 's' : ''} • {totalAbsent} absent{totalAbsent !== 1 ? 's' : ''}
-                </p>
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white shadow-lg mb-8">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <FiCalendar className="h-6 w-6 text-blue-200" />
+                <h2 className="text-xl font-bold">Données des présences</h2>
+              </div>
+              <p className="text-blue-100">
+                {formatDate(selectedDate)} • {attendanceData.length} enregistrements
+              </p>
+            </div>
+            
+            <div className="mt-4 lg:mt-0">
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                max={new Date().toISOString().split('T')[0]}
+                className="px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-blue-200 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-green-100 rounded-xl">
+                <FiUserCheck className="h-6 w-6 text-green-600" />
+              </div>
+              <span className="text-xs font-medium px-2 py-1 bg-green-100 text-green-700 rounded-full">
+                Présents
+              </span>
+            </div>
+            <h3 className="text-3xl font-bold text-gray-900 mb-1">
+              {stats?.totalPresent || 0}
+            </h3>
+            <p className="text-gray-600 mb-4">Étudiants présents</p>
+            <div className="pt-4 border-t border-gray-100">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Total étudiants</span>
+                  <span className="font-semibold text-gray-900">{stats?.totalStudents || 0}</span>
+                </div>
               </div>
             </div>
-            <div className="text-sm text-blue-600 bg-white px-3 py-1 rounded-lg">
-              <FiClock className="inline mr-1" />
-              Mise à jour: {new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-red-100 rounded-xl">
+                <FiXCircle className="h-6 w-6 text-red-600" />
+              </div>
+              <span className="text-xs font-medium px-2 py-1 bg-red-100 text-red-700 rounded-full">
+                Absents
+              </span>
             </div>
+            <h3 className="text-3xl font-bold text-gray-900 mb-1">
+              {stats?.totalAbsent || 0}
+            </h3>
+            <p className="text-gray-600 mb-4">Étudiants absents</p>
+            <div className="pt-4 border-t border-gray-100">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Taux d'absence</span>
+                  <span className="font-semibold text-red-600">
+                    {stats?.totalStudents > 0 
+                      ? Math.round((stats.totalAbsent / stats.totalStudents) * 100) 
+                      : 0}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-blue-100 rounded-xl">
+                <FiPercent className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="flex items-center">
+                <FiTrendingUp className="h-5 w-5 text-blue-500 mr-1" />
+                <span className="text-xs font-medium text-blue-600">
+                  {stats?.attendanceRate || 0}%
+                </span>
+              </div>
+            </div>
+            <h3 className="text-3xl font-bold text-gray-900 mb-1">
+              {stats?.attendanceRate || 0}%
+            </h3>
+            <p className="text-gray-600 mb-4">Taux de présence</p>
+            <div className="pt-4 border-t border-gray-100">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Session</span>
+                  <span className="font-semibold text-blue-600">
+                    {stats?.totalSessions || 0} sessions
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-purple-100 rounded-xl">
+                <FiRadio className="h-6 w-6 text-purple-600" />
+              </div>
+              <span className="text-xs font-medium px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
+                ESP32
+              </span>
+            </div>
+            <h3 className="text-3xl font-bold text-gray-900 mb-1">
+              {stats?.openSessions || 0}
+            </h3>
+            <p className="text-gray-600 mb-4">Sessions ouvertes</p>
+            <div className="pt-4 border-t border-gray-100">
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">Sessions fermées</span>
+                  <span className="font-semibold text-purple-600">{stats?.closedSessions || 0}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* View Toggle */}
+      <div className="max-w-7xl mx-auto mb-8">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+          <div className="flex border-b border-gray-200">
+            <button
+              onClick={() => setViewMode('sessions')}
+              className={`flex-1 py-4 px-6 text-center font-medium text-lg transition-colors ${
+                viewMode === 'sessions'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <FiCalendar className="h-5 w-5" />
+                Sessions
+              </div>
+            </button>
+            <button
+              onClick={() => setViewMode('attendance')}
+              className={`flex-1 py-4 px-6 text-center font-medium text-lg transition-colors ${
+                viewMode === 'attendance'
+                  ? 'text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <FiUsers className="h-5 w-5" />
+                Présences
+              </div>
+            </button>
           </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-center">
-            <FiFilter className="h-5 w-5 text-gray-500 mr-3" />
-            <h2 className="text-lg font-semibold text-gray-900">Filtres et sélection</h2>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex items-center">
+      <div className="max-w-7xl mx-auto mb-8">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="flex-1">
               <div className="relative">
-                <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={handleDateChange}
-                  max={new Date().toISOString().split('T')[0]}
-                  className="pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  type="text"
+                  placeholder="Rechercher un étudiant..."
+                  className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
+                  onChange={(e) => {
+                    // Implement search functionality
+                  }}
                 />
               </div>
             </div>
             
-            <div className="flex items-center">
-              <div className="relative">
-                <FiHome className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <select
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <FiFilter className="h-5 w-5 text-gray-500" />
+                <select 
                   value={selectedRoom}
-                  onChange={handleRoomChange}
-                  className="pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  onChange={(e) => setSelectedRoom(e.target.value)}
+                  className="border border-gray-300 rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm min-w-[180px]"
                 >
-                  <option value="">Toutes les salles</option>
+                  <option value="all">Toutes les salles</option>
                   {rooms.map(room => (
                     <option key={room.id} value={room.id}>{room.name}</option>
                   ))}
                 </select>
               </div>
-            </div>
-            
-            <div className="flex items-center">
-              <div className="relative">
-                <FiActivity className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              
+              <div className="flex items-center gap-2">
+                <FiUsers className="h-5 w-5 text-gray-500" />
+                <select 
+                  value={selectedGroup}
+                  onChange={(e) => setSelectedGroup(e.target.value)}
+                  className="border border-gray-300 rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm min-w-[180px]"
                 >
-                  <option value="all">Tous les statuts</option>
-                  <option value="OPEN">Sessions ouvertes</option>
-                  <option value="CLOSED">Sessions fermées</option>
-                </select>
-              </div>
-            </div>
-            
-            <div className="flex items-center">
-              <div className="relative">
-                <FiRadio className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <select
-                  value={methodFilter}
-                  onChange={(e) => setMethodFilter(e.target.value)}
-                  className="pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">Toutes méthodes</option>
-                  <option value="RFID">RFID seulement</option>
-                  <option value="FINGERPRINT">Empreinte seulement</option>
+                  <option value="all">Tous les groupes</option>
+                  {groups.map((group, index) => (
+                    <option key={index} value={group}>{group}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -465,414 +519,454 @@ const Attendance = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Taux de présence</p>
-              <p className="text-2xl font-bold text-gray-900">{attendanceRate}%</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {totalPresent}/{totalStudents} étudiant{totalStudents !== 1 ? 's' : ''}
-              </p>
-            </div>
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <FiPercent className="h-6 w-6 text-blue-600" />
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Sessions ouvertes</p>
-              <p className="text-2xl font-bold text-green-600">{openSessions}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {closedSessions} fermée{closedSessions !== 1 ? 's' : ''}
-              </p>
-            </div>
-            <div className="p-2 bg-green-100 rounded-lg">
-              <FiPlayCircle className="h-6 w-6 text-green-600" />
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Par RFID</p>
-              <p className="text-2xl font-bold text-blue-600">{rfidCount}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {totalPresent > 0 ? Math.round((rfidCount / totalPresent) * 100) : 0}% des présences
-              </p>
-            </div>
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <FiRadio className="h-6 w-6 text-blue-600" />
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Par empreinte</p>
-              <p className="text-2xl font-bold text-purple-600">{fingerprintCount}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {totalPresent > 0 ? Math.round((fingerprintCount / totalPresent) * 100) : 0}% des présences
-              </p>
-            </div>
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <FiUserCheck className="h-6 w-6 text-purple-600" />
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Étudiants absents</p>
-              <p className="text-2xl font-bold text-gray-900">{totalAbsent}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                {totalStudents > 0 ? Math.round((totalAbsent / totalStudents) * 100) : 0}% du total
-              </p>
-            </div>
-            <div className="p-2 bg-gray-100 rounded-lg">
-              <FiUsers className="h-6 w-6 text-gray-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Présences par salle */}
-      {stats?.byRoom && Object.keys(stats.byRoom).length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-              <FiTrendingUp className="mr-2 text-blue-600" />
-              Présences par salle
-            </h2>
-            <div className="text-sm text-gray-500">
-              Distribution des présences
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Object.entries(stats.byRoom).map(([room, roomStats]) => {
-              const total = roomStats.total || 1;
-              const presentPercentage = Math.round((roomStats.present / total) * 100);
-              const absentPercentage = Math.round((roomStats.absent / total) * 100);
+      {/* Sessions View */}
+      {viewMode === 'sessions' && (
+        <div className="max-w-7xl mx-auto">
+          {/* Sessions Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {sessions.map(session => {
+              const isExpanded = expandedSessions[session.id];
+              const room = rooms.find(r => r.id === session.room);
+              const attendanceForSession = attendanceData.filter(record => 
+                record.group === session.group && record.date === selectedDate
+              );
+              
+              const presentCount = attendanceForSession.filter(a => a.status === 'PRESENT').length;
+              const absentCount = attendanceForSession.filter(a => a.status === 'ABSENT').length;
+              const totalCount = presentCount + absentCount;
+              const attendanceRate = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
               
               return (
-                <div key={room} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className="font-medium text-gray-900">{room}</h3>
-                      <p className="text-sm text-gray-600">
-                        {roomStats.present} présent{roomStats.present !== 1 ? 's' : ''} • {roomStats.absent} absent{roomStats.absent !== 1 ? 's' : ''}
-                      </p>
+                <div key={session.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200">
+                  {/* Session Header */}
+                  <div className="p-6 border-b border-gray-100">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <h3 className="font-bold text-gray-900 text-xl">{session.subject || 'Session'}</h3>
+                          <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+                            session.status === 'OPEN' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {session.status === 'OPEN' ? 'Ouverte' : 'Fermée'}
+                          </span>
+                        </div>
+                        <div className="flex items-center text-gray-600 mb-1">
+                          <FiHome className="h-4 w-4 mr-2" />
+                          <span className="font-medium">{room?.name || session.room}</span>
+                        </div>
+                        <div className="flex items-center text-gray-600">
+                          <FiUsers className="h-4 w-4 mr-2" />
+                          <span>Groupe: {session.group}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-blue-600 mb-1">{attendanceRate}%</div>
+                        <div className="text-sm text-gray-500">Taux présence</div>
+                      </div>
                     </div>
-                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                      {presentPercentage}%
-                    </span>
+
+                    {/* Session Details */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-gray-50 p-4 rounded-xl">
+                        <div className="text-sm text-gray-500 mb-1">Horaires</div>
+                        <div className="font-medium">
+                          {session.start} - {session.end}
+                        </div>
+                      </div>
+                      
+                      <div className="bg-gray-50 p-4 rounded-xl">
+                        <div className="text-sm text-gray-500 mb-1">Présences</div>
+                        <div className="font-medium">
+                          {presentCount} présent{presentCount !== 1 ? 's' : ''} • {absentCount} absent{absentCount !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${presentPercentage}%` }}
-                    ></div>
-                  </div>
-                  <div className="mt-3 flex justify-between text-xs text-gray-500">
-                    <span>Présents: {presentPercentage}%</span>
-                    <span>Absents: {absentPercentage}%</span>
+
+                  {/* Session Actions & Details */}
+                  <div className="p-6">
+                    <div className="flex justify-between items-center mb-6">
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center">
+                          <div className="h-3 w-3 rounded-full bg-green-500 mr-2"></div>
+                          <span className="text-sm text-gray-600">Présents</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="h-3 w-3 rounded-full bg-red-500 mr-2"></div>
+                          <span className="text-sm text-gray-600">Absents</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-3">
+                        {session.status === 'OPEN' && (
+                          <button
+                            onClick={() => handleCloseSession(session.id)}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors"
+                          >
+                            <FiStopCircle className="h-4 w-4" />
+                            Fermer
+                          </button>
+                        )}
+                        <button
+                          onClick={() => toggleSession(session.id)}
+                          className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+                        >
+                          {isExpanded ? 'Masquer' : 'Voir'} détails
+                          {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded Session Details */}
+                    {isExpanded && (
+                      <div className="border border-gray-200 rounded-xl overflow-hidden">
+                        <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                          <h4 className="font-bold text-gray-900">Liste des présences</h4>
+                        </div>
+                        <div className="divide-y divide-gray-200">
+                          {attendanceForSession.length > 0 ? (
+                            attendanceForSession.map((record, index) => {
+                              const student = students.find(s => s.id === record.student_id);
+                              
+                              return (
+                                <div key={index} className="p-4 hover:bg-gray-50">
+                                  <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                      <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                                        record.status === 'PRESENT' ? 'bg-green-100' : 'bg-red-100'
+                                      }`}>
+                                        {record.status === 'PRESENT' ? (
+                                          <FiCheckCircle className="h-5 w-5 text-green-600" />
+                                        ) : (
+                                          <FiXCircle className="h-5 w-5 text-red-600" />
+                                        )}
+                                      </div>
+                                      <div>
+                                        <div className="font-medium text-gray-900">
+                                          {student?.name || `Étudiant ${record.student_id}`}
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                          ID: {record.student_id} • Groupe: {record.group}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                        record.status === 'PRESENT' 
+                                          ? 'bg-green-100 text-green-800' 
+                                          : 'bg-red-100 text-red-800'
+                                      }`}>
+                                        {record.status === 'PRESENT' ? 'PRÉSENT' : 'ABSENT'}
+                                      </div>
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        {formatTime(record.created_at)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="p-8 text-center">
+                              <FiUserPlus className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                              <p className="text-gray-500">Aucune présence enregistrée pour cette session</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
 
-      {/* Liste des sessions */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="p-5 border-b border-gray-200">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-                <FiList className="mr-2 text-gray-600" />
-                Sessions et présences
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Données pour le {formatDate(selectedDate)} • {sessions.length} session{sessions.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handleExportJSON}
-                className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                <FiFileText className="h-4 w-4" />
-                Exporter JSON
-              </button>
-              <button
-                onClick={() => sessionAPI.autoClose()}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                <FiStopCircle className="h-4 w-4" />
-                Fermer sessions finies
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <div className="overflow-x-auto">
-          {sessions.length > 0 ? (
-            <div className="divide-y divide-gray-200">
-              {sessions.map(session => {
-                const sessionAttendance = attendanceData[session.id] || {};
-                const isExpanded = expandedSessions[session.id];
-                const roomName = session.room_name || session.room;
-                
-                // Filtrer les étudiants par méthode
-                const filteredAttendance = Object.entries(sessionAttendance).filter(([attendance]) => {
-                  if (methodFilter === 'all') return true;
-                  return attendance.method === methodFilter;
-                });
-                
-                const presentCount = Object.values(sessionAttendance).filter(a => a.status === 'PRESENT').length;
-                const absentCount = Object.values(sessionAttendance).filter(a => a.status === 'ABSENT').length;
-                const totalCount = presentCount + absentCount;
-                
-                return (
-                  <div key={session.id} className="p-5">
-                    {/* En-tête de session */}
-                    <div 
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 cursor-pointer hover:bg-gray-50 p-3 rounded-lg transition-colors"
-                      onClick={() => toggleSession(session.id)}
-                    >
-                      <div className="flex items-start space-x-4">
-                        <div className={`p-2 rounded-lg ${session.status === 'OPEN' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                          {session.status === 'OPEN' ? <FiPlayCircle className="h-5 w-5" /> : <FiStopCircle className="h-5 w-5" />}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                            <h3 className="font-semibold text-gray-900">{roomName}</h3>
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
-                              {formatSessionTime(session.start, session.end)}
-                            </span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              session.status === 'OPEN' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {session.status === 'OPEN' ? 'OUVERTE' : 'FERMÉE'}
-                            </span>
-                            <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs">
-                              <FiBook className="inline mr-1" size={10} />
-                              {session.subject || 'N/A'}
-                            </span>
-                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">
-                              <FiUsers className="inline mr-1" size={10} />
-                              {session.group || 'N/A'}
-                            </span>
-                          </div>
-                          <div className="text-sm text-gray-600 space-y-1">
-                            <div className="flex items-center space-x-4">
-                              <span className="text-green-600">
-                                <FiUserCheck className="inline mr-1" size={14} />
-                                {presentCount} présent{presentCount !== 1 ? 's' : ''}
-                              </span>
-                              <span className="text-red-600">
-                                <FiUsers className="inline mr-1" size={14} />
-                                {absentCount} absent{absentCount !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              ID: {session.id}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-4">
-                        <div className="text-right">
-                          <div className="text-2xl font-bold text-gray-900">
-                            {totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0}%
-                          </div>
-                          <div className="text-sm text-gray-500">Taux présence</div>
-                        </div>
-                        {session.status === 'OPEN' && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCloseSession(session.id);
-                            }}
-                            className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-sm hover:bg-red-200"
-                          >
-                            Fermer
-                          </button>
-                        )}
-                        {isExpanded ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
-                      </div>
-                    </div>
-                    
-                    {/* Détails de la session (dépliés) */}
-                    {isExpanded && (
-                      <div className="mt-4 border border-gray-200 rounded-lg overflow-hidden">
-                        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
-                          <h4 className="font-medium text-gray-900 flex items-center">
-                            <FiUsers className="mr-2" size={16} />
-                            Liste des étudiants ({filteredAttendance.length})
-                          </h4>
-                          <div className="text-sm text-gray-500">
-                            Groupe: {session.group} • {presentCount}/{totalCount} présent
-                          </div>
-                        </div>
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Étudiant
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Groupe
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Statut
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Méthode
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Heure
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200">
-                            {filteredAttendance.length > 0 ? (
-                              filteredAttendance.map(([studentId, attendance]) => {
-                                const studentName = getStudentName(studentId);
-                                const studentGroup = getStudentGroup(studentId);
-                                return (
-                                  <tr key={studentId} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3">
-                                      <div className="flex items-center">
-                                        <div className="h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center mr-3">
-                                          <FiUsers className="h-4 w-4 text-gray-600" />
-                                        </div>
-                                        <div>
-                                          <div className="font-medium text-gray-900">
-                                            {studentName}
-                                          </div>
-                                          <div className="text-xs text-gray-500">
-                                            ID: {studentId}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-sm">
-                                        {studentGroup}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${
-                                        attendance.status === 'PRESENT' 
-                                          ? 'bg-green-100 text-green-800'
-                                          : 'bg-red-100 text-red-800'
-                                      }`}>
-                                        {attendance.status === 'PRESENT' ? 'PRÉSENT' : 'ABSENT'}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      {attendance.method && (
-                                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${
-                                          attendance.method === 'RFID' 
-                                            ? 'bg-blue-100 text-blue-800'
-                                            : 'bg-purple-100 text-purple-800'
-                                        }`}>
-                                          {attendance.method === 'RFID' ? (
-                                            <>
-                                              <FiRadio className="mr-1 h-3 w-3" />
-                                              RFID
-                                            </>
-                                          ) : (
-                                            <>
-                                              <FiUserCheck className="mr-1 h-3 w-3" />
-                                              EMPREINTE
-                                            </>
-                                          )}
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      <div className="flex items-center text-sm text-gray-500">
-                                        <FiClock className="h-4 w-4 mr-2" />
-                                        {attendance.time || '—'}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })
-                            ) : (
-                              <tr>
-                                <td colSpan="5" className="px-4 py-8 text-center text-gray-500">
-                                  <FiUserPlus className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-                                  <p>Aucune donnée de présence pour cette session</p>
-                                  {methodFilter !== 'all' && (
-                                    <p className="text-sm mt-1">Essayez de changer le filtre de méthode</p>
-                                  )}
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <FiBarChart2 className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Aucune session disponible
-              </h3>
-              <p className="text-gray-500 max-w-md mx-auto mb-6">
-                Aucune session n'a été générée pour cette date et ces filtres.
-                <br />
-                Vérifiez l'emploi du temps ou cliquez sur "Générer sessions".
+          {/* No Sessions */}
+          {sessions.length === 0 && (
+            <div className="text-center py-16 bg-white rounded-2xl border border-gray-200 shadow-sm">
+              <FiCalendar className="h-20 w-20 text-gray-300 mx-auto mb-6" />
+              <h3 className="text-2xl font-bold text-gray-900 mb-3">Aucune session disponible</h3>
+              <p className="text-gray-600 max-w-md mx-auto mb-8">
+                Aucune session n'a été générée pour cette date. Générez les sessions à partir de l'emploi du temps.
               </p>
               <button
-                onClick={generateSessions}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                onClick={handleGenerateSessions}
+                className="inline-flex items-center gap-3 px-6 py-3.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg"
               >
-                Générer les sessions pour {selectedDate}
+                <FiPlayCircle className="h-5 w-5" />
+                Générer les sessions
               </button>
             </div>
           )}
         </div>
-        
-        {/* Footer Summary */}
-        {sessions.length > 0 && (
-          <div className="p-5 border-t border-gray-200 bg-gray-50">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between text-sm text-gray-600">
-              <div className="mb-2 sm:mb-0">
-                Total: <span className="font-semibold">{sessions.length}</span> session{sessions.length !== 1 ? 's' : ''} •{' '}
-                <span className="font-semibold">{totalPresent}</span> présent{totalPresent !== 1 ? 's' : ''} •{' '}
-                <span className="font-semibold">{totalAbsent}</span> absent{totalAbsent !== 1 ? 's' : ''}
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center">
-                  <FiPlayCircle className="h-4 w-4 text-green-500 mr-1" />
-                  <span>{openSessions} ouverte{openSessions !== 1 ? 's' : ''}</span>
+      )}
+
+      {/* Attendance View */}
+      {viewMode === 'attendance' && (
+        <div className="max-w-7xl mx-auto">
+          {/* Attendance Table */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8">
+            {/* Table Header */}
+            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-blue-50">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Liste des présences</h2>
+                  <p className="text-gray-600">
+                    {attendanceData.length} enregistrement{attendanceData.length !== 1 ? 's' : ''} pour le {formatDate(selectedDate)}
+                  </p>
                 </div>
-                <div className="flex items-center">
-                  <FiStopCircle className="h-4 w-4 text-gray-500 mr-1" />
-                  <span>{closedSessions} fermée{closedSessions !== 1 ? 's' : ''}</span>
+                <div className="mt-3 lg:mt-0">
+                  <button
+                    onClick={handleAutoClose}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-xl hover:from-red-700 hover:to-orange-700 transition-all duration-200 shadow-md hover:shadow-lg"
+                  >
+                    <FiStopCircle className="h-4 w-4" />
+                    Fermer toutes les sessions
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Table Content */}
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Étudiant</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Groupe</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Salle</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Statut</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Méthode</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Heure</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {attendanceData.length > 0 ? (
+                    attendanceData.map((record, index) => {
+                      const student = students.find(s => s.id === record.student_id);
+                      const room = rooms.find(r => r.name === record.room);
+                      
+                      return (
+                        <tr key={index} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                                record.status === 'PRESENT' ? 'bg-green-100' : 'bg-red-100'
+                              }`}>
+                                {record.status === 'PRESENT' ? (
+                                  <FiCheckCircle className="h-5 w-5 text-green-600" />
+                                ) : (
+                                  <FiXCircle className="h-5 w-5 text-red-600" />
+                                )}
+                              </div>
+                              <div>
+                                <div className="font-medium text-gray-900">
+                                  {student?.name || `Étudiant ${record.student_id}`}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  ID: {record.student_id}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                              {record.group_name || record.group}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <FiHome className="h-4 w-4 text-gray-400" />
+                              <span>{record.room || '—'}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+                              record.status === 'PRESENT' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {record.status === 'PRESENT' ? 'PRÉSENT' : 'ABSENT'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <FiRadio className="h-4 w-4 text-purple-500" />
+                              <span className="text-sm text-gray-700">Empreinte digitale</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <FiClock className="h-4 w-4" />
+                              {formatTime(record.created_at)}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-12 text-center">
+                        <FiUsers className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune présence enregistrée</h3>
+                        <p className="text-gray-500">Aucune donnée de présence pour cette date et ces filtres.</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Statistics Summary */}
+      <div className="max-w-7xl mx-auto mb-8">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Récapitulatif des statistiques</h2>
+              <p className="text-gray-600">Synthèse des présences pour la journée</p>
+            </div>
+            <div className="mt-4 lg:mt-0">
+              <div className="flex items-center gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">{stats?.attendanceRate || 0}%</div>
+                  <div className="text-sm text-gray-500">Taux global</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">{stats?.totalPresent || 0}</div>
+                  <div className="text-sm text-gray-500">Présents</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-red-600">{stats?.totalAbsent || 0}</div>
+                  <div className="text-sm text-gray-500">Absents</div>
                 </div>
               </div>
             </div>
           </div>
-        )}
+
+          {/* Room Statistics */}
+          {stats?.byRoom && Object.keys(stats.byRoom).length > 0 && (
+            <div className="mb-6">
+              <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <FiHome className="h-5 w-5 text-blue-600" />
+                Présences par salle
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.entries(stats.byRoom).map(([roomName, roomStats]) => {
+                  const total = roomStats.present + roomStats.absent;
+                  const rate = total > 0 ? Math.round((roomStats.present / total) * 100) : 0;
+                  
+                  return (
+                    <div key={roomName} className="border border-gray-200 rounded-xl p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="font-medium text-gray-900">{roomName}</h4>
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          rate >= 80 ? 'bg-green-100 text-green-800' :
+                          rate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {rate}%
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Présents</span>
+                          <span className="font-medium text-green-600">{roomStats.present}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Absents</span>
+                          <span className="font-medium text-red-600">{roomStats.absent}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              rate >= 80 ? 'bg-green-500' :
+                              rate >= 50 ? 'bg-yellow-500' :
+                              'bg-red-500'
+                            }`}
+                            style={{ width: `${rate}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Group Statistics */}
+          {stats?.byGroup && Object.keys(stats.byGroup).length > 0 && (
+            <div>
+              <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <FiUsers className="h-5 w-5 text-purple-600" />
+                Présences par groupe
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.entries(stats.byGroup).map(([groupName, groupStats]) => {
+                  const total = groupStats.present + groupStats.absent;
+                  const rate = total > 0 ? Math.round((groupStats.present / total) * 100) : 0;
+                  
+                  return (
+                    <div key={groupName} className="border border-gray-200 rounded-xl p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="font-medium text-gray-900">{groupName}</h4>
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          rate >= 80 ? 'bg-green-100 text-green-800' :
+                          rate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {rate}%
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Présents</span>
+                          <span className="font-medium text-green-600">{groupStats.present}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Absents</span>
+                          <span className="font-medium text-red-600">{groupStats.absent}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              rate >= 80 ? 'bg-green-500' :
+                              rate >= 50 ? 'bg-yellow-500' :
+                              'bg-red-500'
+                            }`}
+                            style={{ width: `${rate}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="max-w-7xl mx-auto mt-8 pt-6 border-t border-gray-200">
+        <div className="flex flex-col md:flex-row md:items-center justify-between">
+          <div className="mb-4 md:mb-0">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+              <span className="text-sm font-medium text-gray-700">Système de présence actif</span>
+            </div>
+            <p className="text-sm text-gray-600">
+              {attendanceData.length} présences • {sessions.length} sessions • {rooms.length} salles
+            </p>
+          </div>
+          <div className="text-sm text-gray-600">
+            <p>Dernière mise à jour: {new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+          </div>
+        </div>
       </div>
     </div>
   );

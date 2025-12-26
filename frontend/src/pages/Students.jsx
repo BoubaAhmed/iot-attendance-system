@@ -1,28 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { studentAPI } from '../api/api';
-import { listenToStudents } from '../firebase/firebase';
-import { 
-  FiSearch,
-  FiUserPlus,
-  FiEdit2,
-  FiTrash2,
-  FiX,
-  FiCheck,
-  FiUsers,
-  FiCreditCard,
-  FiUserCheck,
-  FiMail,
-  FiPhone,
-  FiActivity,
-  FiFilter,
-  FiDownload
-} from 'react-icons/fi';
+import { FiSearch, FiUserPlus, FiEdit2, FiTrash2, FiX, FiCheck, FiUsers, FiUser, FiMail, FiPhone, FiActivity, FiFilter, FiDownload, FiSave, FiHash, FiBriefcase, FiUserCheck, FiClock, FiRefreshCw, FiEye, FiEyeOff, FiStar, FiTrendingUp, FiCalendar, FiChevronRight, FiChevronLeft, FiCopy, FiAlertCircle, FiShield, FiPercent} from 'react-icons/fi';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import Swal from 'sweetalert2';
+import withReactContent from 'sweetalert2-react-content';
+import studentAPI from '../api/studentsApi';
+
+const MySwal = withReactContent(Swal);
 
 const Students = () => {
-  const [students, setStudents] = useState({});
+  const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showForm, setShowForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -32,33 +21,124 @@ const Students = () => {
     phone: '',
     active: true
   });
-  const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'active', 'inactive'
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [formErrors, setFormErrors] = useState({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(8);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [showMobileForm, setShowMobileForm] = useState(false);
+
+  // Color palette
+  const colors = {
+    primary: {
+      50: '#eff6ff',
+      100: '#dbeafe',
+      200: '#bfdbfe',
+      300: '#93c5fd',
+      400: '#60a5fa',
+      500: '#3b82f6',
+      600: '#2563eb',
+      700: '#1d4ed8',
+      800: '#1e40af',
+      900: '#1e3a8a'
+    },
+    success: {
+      50: '#f0fdf4',
+      100: '#dcfce7',
+      200: '#bbf7d0',
+      300: '#86efac',
+      400: '#4ade80',
+      500: '#22c55e',
+      600: '#16a34a',
+      700: '#15803d',
+      800: '#166534',
+      900: '#14532d'
+    },
+    warning: {
+      50: '#fffbeb',
+      100: '#fef3c7',
+      200: '#fde68a',
+      300: '#fcd34d',
+      400: '#fbbf24',
+      500: '#f59e0b',
+      600: '#d97706',
+      700: '#b45309',
+      800: '#92400e',
+      900: '#78350f'
+    },
+    danger: {
+      50: '#fef2f2',
+      100: '#fee2e2',
+      200: '#fecaca',
+      300: '#fca5a5',
+      400: '#f87171',
+      500: '#ef4444',
+      600: '#dc2626',
+      700: '#b91c1c',
+      800: '#991b1b',
+      900: '#7f1d1d'
+    },
+    gray: {
+      50: '#f9fafb',
+      100: '#f3f4f6',
+      200: '#e5e7eb',
+      300: '#d1d5db',
+      400: '#9ca3af',
+      500: '#6b7280',
+      600: '#4b5563',
+      700: '#374151',
+      800: '#1f2937',
+      900: '#111827'
+    }
+  };
 
   useEffect(() => {
     fetchStudents();
-    setupRealtimeListener();
   }, []);
 
   const fetchStudents = async () => {
     try {
+      setLoading(true);
       const response = await studentAPI.getAll();
       if (response.data.success) {
-        setStudents(response.data.data || {});
+        // Handle the case where data might be an object or array
+        let studentsData = response.data.data;
+        if (studentsData && typeof studentsData === 'object' && !Array.isArray(studentsData)) {
+          // Convert object to array if needed
+          studentsData = Object.values(studentsData);
+        }
+        const sortedStudents = (studentsData || []).sort((a, b) => 
+          (a.name || '').localeCompare(b.name || '')
+        );
+        setStudents(sortedStudents);
+      } else {
+        toast.error(response.data.error || 'Failed to load students');
       }
     } catch (error) {
-      console.error('Erreur chargement étudiants:', error);
+      console.error('Error loading students:', error);
+      toast.error('Error loading students. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const setupRealtimeListener = () => {
-    const unsubscribe = listenToStudents((data) => {
-      if (data) {
-        setStudents(data);
-      }
-    });
-    return unsubscribe;
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!formData.name.trim()) {
+      errors.name = 'Name is required';
+    }
+    
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = 'Invalid email format';
+    }
+    
+    if (formData.fingerprint_id && !/^\d+$/.test(formData.fingerprint_id)) {
+      errors.fingerprint_id = 'Fingerprint ID must be a number';
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleInputChange = (e) => {
@@ -67,46 +147,132 @@ const Students = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+    
+    if (formErrors[name]) {
+      setFormErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      toast.error('Please fix form errors');
+      return;
+    }
+    
     try {
-      if (editingStudent) {
-        await studentAPI.update(editingStudent.id, formData);
-      } else {
-        await studentAPI.create(formData);
+      // Prepare student data
+      const studentData = {
+        name: formData.name.trim(),
+        group: formData.group.trim() || '',
+        email: formData.email.trim() || '',
+        phone: formData.phone.trim() || '',
+        active: formData.active
+      };
+      
+      // Only include fingerprint_id if it's provided
+      if (formData.fingerprint_id.trim()) {
+        studentData.fingerprint_id = parseInt(formData.fingerprint_id);
       }
-      resetForm();
-      fetchStudents();
+      
+      if (editingStudent) {
+        const response = await studentAPI.update(editingStudent.fingerprint_id, studentData);
+        if (response.data.success) {
+          toast.success('Student updated successfully!');
+          resetForm();
+          fetchStudents();
+          setSelectedStudent(null);
+        } else {
+          toast.error(response.data.error || 'Failed to update student');
+        }
+      } else {
+        const response = await studentAPI.create(studentData);
+        if (response.data.success) {
+          toast.success('Student created successfully!');
+          resetForm();
+          fetchStudents();
+        } else {
+          toast.error(response.data.error || 'Failed to create student');
+        }
+      }
     } catch (error) {
-      console.error('Erreur sauvegarde étudiant:', error);
-      alert('Erreur: ' + error.message);
+      console.error('Error saving student:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+      toast.error(`Error: ${errorMessage}`);
     }
   };
 
-  const handleEdit = (studentId) => {
-    const student = students[studentId];
-    setEditingStudent({ id: studentId, ...student });
+  const handleEdit = (student) => {
+    setEditingStudent(student);
     setFormData({
       name: student.name || '',
       group: student.group || '',
-      fingerprint_id: student.fingerprint_id || '',
+      fingerprint_id: student.fingerprint_id?.toString() || '',
       email: student.email || '',
       phone: student.phone || '',
       active: student.active !== false
     });
-    setShowForm(true);
+    setSelectedStudent(student);
+    setShowMobileForm(true);
   };
 
-  const handleDelete = async (studentId) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cet étudiant ?')) {
+  const handleDelete = async (student) => {
+    const result = await MySwal.fire({
+      title: <div className="text-lg font-semibold text-gray-900">Delete Student</div>,
+      html: (
+        <div className="text-left">
+          <p className="mb-4 text-gray-600">Are you sure you want to delete this student?</p>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <div className="flex items-center space-x-3">
+              <div className="h-10 w-10 bg-red-100 rounded-lg flex items-center justify-center">
+                <FiUser className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="font-medium text-gray-900">{student.name}</p>
+                <p className="text-sm text-gray-600">Fingerprint ID: {student.fingerprint_id}</p>
+              </div>
+            </div>
+          </div>
+          <p className="text-sm text-red-600">This action cannot be undone.</p>
+        </div>
+      ),
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: colors.danger[600],
+      cancelButtonColor: colors.gray[500],
+      confirmButtonText: 'Yes, delete it',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      customClass: {
+        popup: 'rounded-xl',
+        confirmButton: 'px-4 py-2 rounded-lg',
+        cancelButton: 'px-4 py-2 rounded-lg'
+      }
+    });
+    
+    if (result.isConfirmed) {
       try {
-        await studentAPI.delete(studentId);
-        fetchStudents();
+        const response = await studentAPI.delete(student.fingerprint_id);
+        if (response.data.success) {
+          toast.success('Student deleted successfully!');
+          fetchStudents();
+          if (selectedStudent?.fingerprint_id === student.fingerprint_id) {
+            setSelectedStudent(null);
+          }
+          if (editingStudent?.fingerprint_id === student.fingerprint_id) {
+            resetForm();
+          }
+        } else {
+          toast.error(response.data.error || 'Failed to delete student');
+        }
       } catch (error) {
-        console.error('Erreur suppression étudiant:', error);
-        alert('Erreur: ' + error.message);
+        console.error('Error deleting student:', error);
+        const errorMessage = error.response?.data?.error || error.message;
+        toast.error(`Error: ${errorMessage}`);
       }
     }
   };
@@ -121,7 +287,7 @@ const Students = () => {
       active: true
     });
     setEditingStudent(null);
-    setShowForm(false);
+    setFormErrors({});
   };
 
   const exportStudents = () => {
@@ -130,22 +296,33 @@ const Students = () => {
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `etudiants_${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `students_${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    toast.success('Students exported successfully!');
   };
 
-  // Filtrer les étudiants
-  const filteredStudents = Object.entries(students).filter(([id, student]) => {
+  const refreshStudents = () => {
+    fetchStudents();
+    toast.info('Refreshing student list...');
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copied to clipboard!');
+  };
+
+  // Filter students
+  const filteredStudents = students.filter(student => {
     if (!student) return false;
     
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = (
       (student.name?.toLowerCase() || '').includes(searchLower) ||
-      id.toLowerCase().includes(searchLower) ||
       (student.group?.toLowerCase() || '').includes(searchLower) ||
-      (student.email?.toLowerCase() || '').includes(searchLower)
+      (student.email?.toLowerCase() || '').includes(searchLower) ||
+      (student.fingerprint_id?.toString() || '').includes(searchLower)
     );
     
     const matchesFilter = 
@@ -156,412 +333,734 @@ const Students = () => {
     return matchesSearch && matchesFilter;
   });
 
-  const activeCount = Object.values(students).filter(s => s?.active !== false).length;
-  const inactiveCount = Object.values(students).filter(s => s?.active === false).length;
+  // Pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentStudents = filteredStudents.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
+  const activeCount = students.filter(s => s?.active !== false).length;
+  const inactiveCount = students.filter(s => s?.active === false).length;
+  const activePercentage = students.length > 0 ? Math.round((activeCount / students.length) * 100) : 0;
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex items-center justify-center min-h-screen" style={{ backgroundColor: colors.gray[50] }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement des étudiants...</p>
+          <div className="relative">
+            <div className="h-16 w-16 rounded-full border-4 border-t-transparent animate-spin mx-auto" style={{ borderColor: colors.primary[500] }}></div>
+            <FiUsers className="h-8 w-8 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" style={{ color: colors.primary[600] }} />
+          </div>
+          <p className="mt-4 text-gray-600 font-medium">Loading students...</p>
+          <p className="text-sm text-gray-500">Please wait a moment</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestion des étudiants</h1>
-            <p className="text-gray-600 mt-1">
-              {Object.keys(students).length} étudiant{Object.keys(students).length !== 1 ? 's' : ''} enregistré{Object.keys(students).length !== 1 ? 's' : ''}
-            </p>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              onClick={exportStudents}
-              className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              <FiDownload className="h-4 w-4" />
-              Exporter
-            </button>
-            <button
-              onClick={() => setShowForm(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <FiUserPlus className="h-5 w-5" />
-              Nouvel étudiant
-            </button>
-          </div>
-        </div>
+    <div className="min-h-screen" style={{ backgroundColor: colors.gray[50] }}>
+      <ToastContainer 
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+      />
+      
+      {/* Mobile Form Toggle Button */}
+      <button
+        onClick={() => setShowMobileForm(!showMobileForm)}
+        className="lg:hidden fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lg flex items-center justify-center"
+        style={{ backgroundColor: colors.primary[600] }}
+      >
+        {showMobileForm ? (
+          <FiX className="h-6 w-6 text-white" />
+        ) : (
+          <FiUserPlus className="h-6 w-6 text-white" />
+        )}
+      </button>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Total</p>
-                <p className="text-2xl font-bold text-gray-900">{Object.keys(students).length}</p>
-              </div>
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <FiUsers className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Actifs</p>
-                <p className="text-2xl font-bold text-green-600">{activeCount}</p>
-              </div>
-              <div className="p-2 bg-green-100 rounded-lg">
-                <FiActivity className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Inactifs</p>
-                <p className="text-2xl font-bold text-gray-600">{inactiveCount}</p>
-              </div>
-              <div className="p-2 bg-gray-100 rounded-lg">
-                <FiUsers className="h-6 w-6 text-gray-600" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Search and Filter Bar */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-        <div className="flex flex-col md:flex-row md:items-center gap-4">
-          <div className="flex-1 relative">
-            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Rechercher par nom, ID, groupe ou email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <FiFilter className="h-5 w-5 text-gray-500" />
-            <select 
-              value={activeFilter}
-              onChange={(e) => setActiveFilter(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">Tous les étudiants</option>
-              <option value="active">Actifs seulement</option>
-              <option value="inactive">Inactifs seulement</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Formulaire modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-5 md:p-6">
-              <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-200">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+            <div>
+              <div className="flex items-center space-x-3">
+                <div className="p-3 rounded-xl" style={{ backgroundColor: colors.primary[100] }}>
+                  <FiUsers className="h-8 w-8" style={{ color: colors.primary[600] }} />
+                </div>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">
-                    {editingStudent ? 'Modifier étudiant' : 'Ajouter un étudiant'}
-                  </h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {editingStudent ? `ID: ${editingStudent.id}` : 'Remplissez les informations de l\'étudiant'}
+                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Student Management</h1>
+                  <p className="text-gray-600 mt-1 flex items-center space-x-2">
+                    <span>{students.length} student{students.length !== 1 ? 's' : ''} registered</span>
+                    <span className="text-gray-400">•</span>
+                    <span className="flex items-center">
+                      <FiPercent className="h-4 w-4 mr-1" />
+                      {activePercentage}% active
+                    </span>
                   </p>
                 </div>
-                <button
-                  onClick={resetForm}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <FiX className="h-6 w-6 text-gray-500" />
-                </button>
+              </div>
+            </div>
+            
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={refreshStudents}
+                className="flex items-center gap-2 px-4 py-2.5 border rounded-lg hover:shadow-sm transition-all"
+                style={{ 
+                  backgroundColor: 'white',
+                  borderColor: colors.gray[300],
+                  color: colors.gray[700]
+                }}
+              >
+                <FiRefreshCw className="h-4 w-4" />
+                Refresh
+              </button>
+              <button
+                onClick={exportStudents}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg hover:shadow-sm transition-all"
+                style={{ 
+                  backgroundColor: colors.warning[100],
+                  color: colors.warning[700]
+                }}
+              >
+                <FiDownload className="h-4 w-4" />
+                Export
+              </button>
+            </div>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="rounded-xl p-5 shadow-sm transition-all hover:shadow-md"
+              style={{ 
+                background: `linear-gradient(135deg, ${colors.primary[50]}, white)`,
+                border: `1px solid ${colors.primary[200]}`
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium" style={{ color: colors.primary[600] }}>Total Students</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{students.length}</p>
+                </div>
+                <div className="p-3 rounded-lg" style={{ backgroundColor: colors.primary[100] }}>
+                  <FiUsers className="h-6 w-6" style={{ color: colors.primary[600] }} />
+                </div>
+              </div>
+            </div>
+            
+            <div className="rounded-xl p-5 shadow-sm transition-all hover:shadow-md"
+              style={{ 
+                background: `linear-gradient(135deg, ${colors.success[50]}, white)`,
+                border: `1px solid ${colors.success[200]}`
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium" style={{ color: colors.success[600] }}>Active</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{activeCount}</p>
+                </div>
+                <div className="p-3 rounded-lg" style={{ backgroundColor: colors.success[100] }}>
+                  <FiActivity className="h-6 w-6" style={{ color: colors.success[600] }} />
+                </div>
+              </div>
+            </div>
+            
+            <div className="rounded-xl p-5 shadow-sm transition-all hover:shadow-md"
+              style={{ 
+                background: `linear-gradient(135deg, ${colors.gray[50]}, white)`,
+                border: `1px solid ${colors.gray[200]}`
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium" style={{ color: colors.gray[600] }}>Inactive</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{inactiveCount}</p>
+                </div>
+                <div className="p-3 rounded-lg" style={{ backgroundColor: colors.gray[100] }}>
+                  <FiUserCheck className="h-6 w-6" style={{ color: colors.gray[600] }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Left Column - Students Table (2/3 on desktop) */}
+          <div className="lg:w-2/3">
+            {/* Search and Filter Bar */}
+            <div className="rounded-xl p-4 mb-6 shadow-sm"
+              style={{ 
+                backgroundColor: 'white',
+                border: `1px solid ${colors.gray[200]}`
+              }}
+            >
+              <div className="flex flex-col md:flex-row md:items-center gap-4">
+                <div className="flex-1 relative">
+                  <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5" 
+                    style={{ color: colors.gray[400] }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search by name, group, email, or fingerprint ID..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg focus:ring-2 focus:outline-none transition-all"
+                    style={{ 
+                      backgroundColor: colors.gray[50],
+                      border: `1px solid ${colors.gray[300]}`,
+                      color: colors.gray[900]
+                    }}
+                  />
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2">
+                    <FiFilter className="h-5 w-5" style={{ color: colors.gray[500] }} />
+                    <select 
+                      value={activeFilter}
+                      onChange={(e) => setActiveFilter(e.target.value)}
+                      className="px-3 py-2.5 rounded-lg focus:ring-2 focus:outline-none transition-all"
+                      style={{ 
+                        backgroundColor: colors.gray[50],
+                        border: `1px solid ${colors.gray[300]}`,
+                        color: colors.gray[700],
+                        minWidth: '180px'
+                      }}
+                    >
+                      <option value="all">All Students</option>
+                      <option value="active">Active Only</option>
+                      <option value="inactive">Inactive Only</option>
+                    </select>
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      resetForm();
+                      setSelectedStudent(null);
+                      setShowMobileForm(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg hover:shadow-sm transition-all"
+                    style={{ 
+                      backgroundColor: colors.primary[50],
+                      color: colors.primary[700]
+                    }}
+                  >
+                    <FiUserPlus className="h-4 w-4" />
+                    Add New
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Students Table */}
+            <div className="rounded-xl overflow-hidden shadow-sm"
+              style={{ 
+                backgroundColor: 'white',
+                border: `1px solid ${colors.gray[200]}`
+              }}
+            >
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr style={{ backgroundColor: colors.gray[50] }}>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.gray[600] }}>
+                        Student
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.gray[600] }}>
+                        Details
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.gray[600] }}>
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.gray[600] }}>
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y" style={{ borderColor: colors.gray[200] }}>
+                    {currentStudents.map((student, index) => (
+                      <tr 
+                        key={student.fingerprint_id || index} 
+                        className={`transition-all hover:shadow-md cursor-pointer ${
+                          selectedStudent?.fingerprint_id === student.fingerprint_id 
+                            ? 'bg-blue-50' 
+                            : 'hover:bg-gray-50'
+                        }`}
+                        onClick={() => setSelectedStudent(student)}
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <div className="h-10 w-10 shrink-0 rounded-lg flex items-center justify-center"
+                              style={{ 
+                                background: `linear-gradient(135deg, ${colors.primary[100]}, ${colors.primary[200]})`
+                              }}
+                            >
+                              <FiUser className="h-5 w-5" style={{ color: colors.primary[600] }} />
+                            </div>
+                            <div className="ml-4">
+                              <div className="font-medium text-gray-900 flex items-center">
+                                {student.name || 'N/A'}
+                                {student.active === false && (
+                                  <FiEyeOff className="h-4 w-4 ml-2" style={{ color: colors.gray[400] }} />
+                                )}
+                              </div>
+                              <div className="text-sm flex items-center space-x-2">
+                                <span className="text-gray-500">ID:</span>
+                                <code className="px-2 py-0.5 rounded text-xs"
+                                  style={{ 
+                                    backgroundColor: colors.gray[100],
+                                    color: colors.gray[700]
+                                  }}
+                                >
+                                  {student.fingerprint_id || 'N/A'}
+                                </code>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="space-y-2">
+                            {student.group && (
+                              <div className="flex items-center text-sm">
+                                <FiBriefcase className="h-4 w-4 mr-2 shrink-0" style={{ color: colors.gray[400] }} />
+                                <span className="font-medium" style={{ color: colors.primary[600] }}>
+                                  {student.group}
+                                </span>
+                              </div>
+                            )}
+                            {student.email && (
+                              <div className="flex items-center text-sm">
+                                <FiMail className="h-4 w-4 mr-2 shrink-0" style={{ color: colors.gray[400] }} />
+                                <span className="text-gray-700 truncate max-w-[150px]">{student.email}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center space-x-2">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                              student.active !== false
+                                ? 'text-green-700 bg-green-100 border border-green-200'
+                                : 'text-gray-700 bg-gray-100 border border-gray-200'
+                            }`}>
+                              <div className={`h-2 w-2 rounded-full mr-2 ${
+                                student.active !== false ? 'bg-green-500' : 'bg-gray-500'
+                              }`}></div>
+                              {student.active !== false ? 'Active' : 'Inactive'}
+                            </span>
+                            {student.phone && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyToClipboard(student.phone);
+                                }}
+                                className="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                                title="Copy phone"
+                              >
+                                <FiPhone className="h-4 w-4" style={{ color: colors.gray[500] }} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(student);
+                              }}
+                              className="p-2 rounded-lg transition-all hover:shadow-sm"
+                              style={{ 
+                                backgroundColor: colors.primary[50],
+                                color: colors.primary[600]
+                              }}
+                              title="Edit"
+                            >
+                              <FiEdit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(student);
+                              }}
+                              className="p-2 rounded-lg transition-all hover:shadow-sm"
+                              style={{ 
+                                backgroundColor: colors.danger[50],
+                                color: colors.danger[600]
+                              }}
+                              title="Delete"
+                            >
+                              <FiTrash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {currentStudents.length === 0 && (
+                  <div className="text-center py-16">
+                    <div className="inline-flex p-6 rounded-full mb-4" 
+                      style={{ backgroundColor: colors.gray[100] }}
+                    >
+                      <FiUsers className="h-16 w-16" style={{ color: colors.gray[400] }} />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      {searchTerm || activeFilter !== 'all' ? 'No students found' : 'No students yet'}
+                    </h3>
+                    <p className="text-gray-600 max-w-md mx-auto mb-6">
+                      {searchTerm 
+                        ? "No students match your search. Try different keywords."
+                        : activeFilter !== 'all'
+                        ? "No students match this filter."
+                        : "Get started by adding your first student."
+                      }
+                    </p>
+                    {!searchTerm && activeFilter === 'all' && (
+                      <button
+                        onClick={() => {
+                          resetForm();
+                          setShowMobileForm(true);
+                        }}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg hover:shadow-lg transition-all"
+                        style={{ 
+                          background: `linear-gradient(135deg, ${colors.primary[500]}, ${colors.primary[600]})`,
+                          color: 'white'
+                        }}
+                      >
+                        <FiUserPlus className="h-5 w-5" />
+                        Add First Student
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nom complet *
-                    </label>
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Ex: Ahmed Benali"
-                    />
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="px-6 py-4 border-t" style={{ borderColor: colors.gray[200] }}>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-600">
+                      Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredStudents.length)} of {filteredStudents.length} entries
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => paginate(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className={`p-2 rounded-lg ${
+                          currentPage === 1 
+                            ? 'text-gray-400 cursor-not-allowed' 
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        <FiChevronLeft className="h-5 w-5" />
+                      </button>
+                      
+                      {[...Array(totalPages)].map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={() => paginate(index + 1)}
+                          className={`px-3 py-1 rounded-lg text-sm font-medium ${
+                            currentPage === index + 1
+                              ? 'text-white'
+                              : 'text-gray-700 hover:bg-gray-100'
+                          }`}
+                          style={{
+                            backgroundColor: currentPage === index + 1 ? colors.primary[600] : 'transparent'
+                          }}
+                        >
+                          {index + 1}
+                        </button>
+                      ))}
+                      
+                      <button
+                        onClick={() => paginate(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                        className={`p-2 rounded-lg ${
+                          currentPage === totalPages 
+                            ? 'text-gray-400 cursor-not-allowed' 
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        <FiChevronRight className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Groupe
-                    </label>
-                    <input
-                      type="text"
-                      name="group"
-                      value={formData.group}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Ex: G1, G2, etc."
-                    />
+          {/* Right Column - Form (1/3 on desktop) */}
+          <div className={`lg:w-1/3 ${showMobileForm ? 'block' : 'hidden lg:block'}`}>
+            <div className="sticky top-6">
+              <div className="rounded-xl shadow-lg overflow-hidden"
+                style={{ 
+                  backgroundColor: 'white',
+                  border: `1px solid ${colors.gray[200]}`
+                }}
+              >
+                {/* Form Header */}
+                <div className="px-6 py-5 border-b"
+                  style={{ 
+                    backgroundColor: colors.primary[50],
+                    borderColor: colors.primary[200]
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 rounded-lg" style={{ backgroundColor: colors.primary[100] }}>
+                        {editingStudent ? (
+                          <FiEdit2 className="h-5 w-5" style={{ color: colors.primary[600] }} />
+                        ) : (
+                          <FiUserPlus className="h-5 w-5" style={{ color: colors.primary[600] }} />
+                        )}
+                      </div>
+                      <div>
+                        <h2 className="font-bold text-gray-900">
+                          {editingStudent ? 'Edit Student' : 'Add New Student'}
+                        </h2>
+                        <p className="text-sm" style={{ color: colors.primary[600] }}>
+                          {editingStudent ? `Fingerprint ID: ${editingStudent.fingerprint_id}` : 'Fill student details'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={resetForm}
+                      className="p-2 rounded-lg hover:bg-white transition-colors"
+                      style={{ color: colors.gray[500] }}
+                    >
+                      <FiX className="h-5 w-5" />
+                    </button>
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email
-                    </label>
-                    <div className="flex items-center border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
-                      <FiMail className="h-5 w-5 text-gray-400 ml-3" />
+                {/* Form */}
+                <form onSubmit={handleSubmit} className="p-6">
+                  <div className="space-y-4">
+                    {/* Name Field */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: colors.gray[700] }}>
+                        <div className="flex items-center">
+                          <FiUser className="h-4 w-4 mr-2" style={{ color: colors.primary[500] }} />
+                          Full Name *
+                        </div>
+                      </label>
+                      <input
+                        type="text"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-3 rounded-lg focus:ring-2 focus:outline-none transition-all"
+                        style={{ 
+                          backgroundColor: colors.gray[50],
+                          border: `1px solid ${formErrors.name ? colors.danger[300] : colors.gray[300]}`,
+                          color: colors.gray[900]
+                        }}
+                        placeholder="Enter student name"
+                      />
+                      {formErrors.name && (
+                        <p className="mt-1 text-sm flex items-center" style={{ color: colors.danger[600] }}>
+                          <FiAlertCircle className="h-4 w-4 mr-1" />
+                          {formErrors.name}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Group Field */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: colors.gray[700] }}>
+                        <div className="flex items-center">
+                          <FiBriefcase className="h-4 w-4 mr-2" style={{ color: colors.primary[500] }} />
+                          Group
+                        </div>
+                      </label>
+                      <input
+                        type="text"
+                        name="group"
+                        value={formData.group}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 rounded-lg focus:ring-2 focus:outline-none transition-all"
+                        style={{ 
+                          backgroundColor: colors.gray[50],
+                          border: `1px solid ${colors.gray[300]}`,
+                          color: colors.gray[900]
+                        }}
+                        placeholder="e.g., G1, G2, etc."
+                      />
+                    </div>
+
+                    {/* Email Field */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: colors.gray[700] }}>
+                        <div className="flex items-center">
+                          <FiMail className="h-4 w-4 mr-2" style={{ color: colors.primary[500] }} />
+                          Email Address
+                        </div>
+                      </label>
                       <input
                         type="email"
                         name="email"
                         value={formData.email}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-3 border-0 rounded-lg focus:ring-0"
-                        placeholder="etudiant@email.com"
+                        className="w-full px-4 py-3 rounded-lg focus:ring-2 focus:outline-none transition-all"
+                        style={{ 
+                          backgroundColor: colors.gray[50],
+                          border: `1px solid ${formErrors.email ? colors.danger[300] : colors.gray[300]}`,
+                          color: colors.gray[900]
+                        }}
+                        placeholder="student@email.com"
                       />
+                      {formErrors.email && (
+                        <p className="mt-1 text-sm flex items-center" style={{ color: colors.danger[600] }}>
+                          <FiAlertCircle className="h-4 w-4 mr-1" />
+                          {formErrors.email}
+                        </p>
+                      )}
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Téléphone
-                    </label>
-                    <div className="flex items-center border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
-                      <FiPhone className="h-5 w-5 text-gray-400 ml-3" />
+                    {/* Phone Field */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: colors.gray[700] }}>
+                        <div className="flex items-center">
+                          <FiPhone className="h-4 w-4 mr-2" style={{ color: colors.primary[500] }} />
+                          Phone Number
+                        </div>
+                      </label>
                       <input
                         type="tel"
                         name="phone"
                         value={formData.phone}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-3 border-0 rounded-lg focus:ring-0"
-                        placeholder="06 XX XX XX XX"
+                        className="w-full px-4 py-3 rounded-lg focus:ring-2 focus:outline-none transition-all"
+                        style={{ 
+                          backgroundColor: colors.gray[50],
+                          border: `1px solid ${colors.gray[300]}`,
+                          color: colors.gray[900]
+                        }}
+                        placeholder="+212 6 XX XX XX XX"
                       />
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      ID Empreinte digitale
-                    </label>
-                    <div className="flex items-center border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
-                      <FiUserCheck className="h-5 w-5 text-gray-400 ml-3" />
+
+                    {/* Fingerprint ID Field */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: colors.gray[700] }}>
+                        <div className="flex items-center">
+                          <FiHash className="h-4 w-4 mr-2" style={{ color: colors.primary[500] }} />
+                          Fingerprint ID
+                        </div>
+                      </label>
                       <input
-                        type="number"
+                        type="text"
                         name="fingerprint_id"
                         value={formData.fingerprint_id}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-3 border-0 rounded-lg focus:ring-0"
-                        placeholder="Ex: 12"
+                        className="w-full px-4 py-3 rounded-lg focus:ring-2 focus:outline-none transition-all"
+                        style={{ 
+                          backgroundColor: colors.gray[50],
+                          border: `1px solid ${formErrors.fingerprint_id ? colors.danger[300] : colors.gray[300]}`,
+                          color: colors.gray[900]
+                        }}
+                        placeholder="Enter fingerprint ID"
                       />
+                      {formErrors.fingerprint_id && (
+                        <p className="mt-1 text-sm flex items-center" style={{ color: colors.danger[600] }}>
+                          <FiAlertCircle className="h-4 w-4 mr-1" />
+                          {formErrors.fingerprint_id}
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs" style={{ color: colors.gray[500] }}>
+                        {editingStudent ? "Cannot change fingerprint ID for existing student" : "Leave empty to auto-generate"}
+                      </p>
+                    </div>
+
+                    {/* Active Status */}
+                    <div className="flex items-center p-4 rounded-lg border transition-all hover:bg-gray-50 cursor-pointer"
+                      style={{ 
+                        backgroundColor: formData.active ? colors.success[50] : colors.gray[50],
+                        borderColor: formData.active ? colors.success[200] : colors.gray[300]
+                      }}
+                      onClick={() => setFormData(prev => ({ ...prev, active: !prev.active }))}
+                    >
+                      <input
+                        type="checkbox"
+                        id="active"
+                        name="active"
+                        checked={formData.active}
+                        onChange={handleInputChange}
+                        className="h-4 w-4 rounded focus:ring-2"
+                        style={{ 
+                          color: colors.primary[600],
+                          borderColor: colors.gray[300]
+                        }}
+                      />
+                      <label htmlFor="active" className="ml-3 text-sm flex-1 cursor-pointer" style={{ color: colors.gray[700] }}>
+                        <div className="flex items-center justify-between">
+                          <span>Student is active</span>
+                          <div className={`h-2 w-2 rounded-full ${formData.active ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                        </div>
+                      </label>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center p-4 bg-gray-50 rounded-lg">
-                  <input
-                    type="checkbox"
-                    id="active"
-                    name="active"
-                    checked={formData.active}
-                    onChange={handleInputChange}
-                    className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
-                  />
-                  <label htmlFor="active" className="ml-3 text-sm text-gray-700">
-                    Cet étudiant est actif dans le système
-                  </label>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    <FiCheck className="h-5 w-5" />
-                    {editingStudent ? 'Mettre à jour' : 'Ajouter l\'étudiant'}
-                  </button>
-                </div>
-              </form>
+                  {/* Form Actions */}
+                  <div className="mt-6 pt-6 border-t" style={{ borderColor: colors.gray[200] }}>
+                    <div className="flex flex-col space-y-3">
+                      <button
+                        type="submit"
+                        className="w-full py-3 rounded-lg font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                        style={{ 
+                          background: `linear-gradient(135deg, ${colors.primary[500]}, ${colors.primary[600]})`,
+                          color: 'white'
+                        }}
+                      >
+                        {editingStudent ? (
+                          <>
+                            <FiSave className="h-5 w-5" />
+                            Update Student
+                          </>
+                        ) : (
+                          <>
+                            <FiUserPlus className="h-5 w-5" />
+                            Add Student
+                          </>
+                        )}
+                      </button>
+                      
+                      {editingStudent && (
+                        <button
+                          type="button"
+                          onClick={resetForm}
+                          className="w-full py-3 rounded-lg font-medium hover:shadow transition-all"
+                          style={{ 
+                            backgroundColor: colors.gray[100],
+                            color: colors.gray[700],
+                            border: `1px solid ${colors.gray[300]}`
+                          }}
+                        >
+                          Cancel Edit
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Tableau des étudiants */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Étudiant
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Informations
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Identifiants
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Statut
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredStudents.map(([id, student]) => (
-                <tr key={id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center">
-                      <div className="h-10 w-10 shrink-0 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <FiUsers className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <div className="ml-4">
-                        <div className="font-medium text-gray-900">
-                          {student?.name || 'Non renseigné'}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          ID: <span className="font-mono">{id}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="space-y-1">
-                      {student?.email && (
-                        <div className="flex items-center text-sm">
-                          <FiMail className="h-4 w-4 text-gray-400 mr-2" />
-                          <span className="truncate max-w-45">{student.email}</span>
-                        </div>
-                      )}
-                      {student?.phone && (
-                        <div className="flex items-center text-sm">
-                          <FiPhone className="h-4 w-4 text-gray-400 mr-2" />
-                          <span>{student.phone}</span>
-                        </div>
-                      )}
-                      {student?.group && (
-                        <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {student.group}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="space-y-2">
-                      {student?.fingerprint_id && (
-                        <div className="flex items-center">
-                          <FiUserCheck className="h-4 w-4 text-gray-400 mr-2" />
-                          <span className="text-sm">ID: {student.fingerprint_id}</span>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                      student?.active !== false
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      <div className={`h-2 w-2 rounded-full mr-2 ${
-                        student?.active !== false ? 'bg-green-500' : 'bg-gray-500'
-                      }`}></div>
-                      {student?.active !== false ? 'Actif' : 'Inactif'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleEdit(id)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Modifier"
-                      >
-                        <FiEdit2 className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Supprimer"
-                      >
-                        <FiTrash2 className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {filteredStudents.length === 0 && (
-            <div className="text-center py-12">
-              <FiUsers className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {searchTerm || activeFilter !== 'all' ? 'Aucun étudiant trouvé' : 'Aucun étudiant'}
-              </h3>
-              <p className="text-gray-500 max-w-md mx-auto mb-6">
-                {searchTerm 
-                  ? 'Aucun étudiant ne correspond à votre recherche. Essayez avec d\'autres termes.'
-                  : activeFilter !== 'all'
-                  ? 'Aucun étudiant ne correspond à ce filtre.'
-                  : 'Commencez par ajouter votre premier étudiant au système.'
-                }
-              </p>
-              {!searchTerm && activeFilter === 'all' && (
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  <FiUserPlus className="h-5 w-5" />
-                  Ajouter un étudiant
-                </button>
-              )}
-            </div>
-          )}
         </div>
       </div>
-
-      {/* Footer Summary */}
-      {filteredStudents.length > 0 && (
-        <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between text-sm text-gray-600">
-          <div className="mb-2 sm:mb-0">
-            Affichage de <span className="font-semibold">{filteredStudents.length}</span> étudiant{filteredStudents.length !== 1 ? 's' : ''} sur {Object.keys(students).length}
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center">
-              <div className="h-2 w-2 rounded-full bg-green-500 mr-2"></div>
-              <span>{activeCount} actifs</span>
-            </div>
-            <div className="flex items-center">
-              <div className="h-2 w-2 rounded-full bg-gray-400 mr-2"></div>
-              <span>{inactiveCount} inactifs</span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { subjectAPI } from '../api/api';
+// import { subjectAPI } from '../api/api';
 import { listenToSubjects } from '../firebase/firebase';
 import { 
   FiBook,
@@ -23,6 +23,7 @@ import {
   FiTag,
   FiBookmark
 } from 'react-icons/fi';
+import subjectAPI from '../api/subjectsApi';
 
 const Subjects = () => {
   const [subjects, setSubjects] = useState([]);
