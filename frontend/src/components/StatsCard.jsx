@@ -1,18 +1,24 @@
-import React from 'react';
+import React from "react";
 
-const StatsCard = ({ title, value, icon: Icon, color, change, trend, detail }) => {
+const StatsCard = ({
+  title,
+  value,
+  icon: Icon,
+  color,
+  change,
+  trend,
+  detail,
+}) => {
   const colorClasses = {
-    blue: 'bg-blue-100 text-blue-600 border-blue-200',
-    green: 'bg-green-100 text-green-600 border-green-200',
-    purple: 'bg-purple-100 text-purple-600 border-purple-200',
-    orange: 'bg-orange-100 text-orange-600 border-orange-200',
-    red: 'bg-red-100 text-red-600 border-red-200'
+    teal: "bg-primary/10 text-primary border-primary/20",
+    accent: "bg-accent/10 text-accent border-accent/20",
+    dark: "bg-primary-dark/5 text-primary-dark border-primary-dark/10",
   };
 
   const trendIcon = {
-    up: '↗',
-    down: '↘',
-    stable: '→'
+    up: "↗",
+    down: "↘",
+    stable: "→",
   };
 
   return (
@@ -28,7 +34,9 @@ const StatsCard = ({ title, value, icon: Icon, color, change, trend, detail }) =
         <p className="text-sm text-gray-500">{detail}</p>
         {change && (
           <div className="flex items-center text-sm">
-            <span className={`mr-1 ${trend === 'up' ? 'text-green-600' : trend === 'down' ? 'text-red-600' : 'text-gray-600'}`}>
+            <span
+              className={`mr-1 ${trend === "up" ? "text-green-600" : trend === "down" ? "text-red-600" : "text-gray-600"}`}
+            >
               {trendIcon[trend]}
             </span>
             <span className="font-medium">{change}</span>
