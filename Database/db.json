@@ -1,143 +1,630 @@
 {
   "attendance": {
-    "2025-12-26": {
-      "G1": {
-        "178250": {
-          "created_at": "2025-12-26T10:43:39.000Z",
-          "status": "PRESENT",
-          "student_id": "0",
-          "student_name": "Ahmed Bouba",
-          "timestamp": "178250"
+    "G1": {
+      "2025-12-26": {
+        "absent": {
+          "S3": {
+            "name": "Lkhalidi Mohamed"
+          }
+        },
+        "present": {
+          "S1": {
+            "name": "Ahmed Bouba",
+            "time": "08:12"
+          }
         }
       },
-      "G2": {
-        "170058": {
-          "created_at": "2025-12-26T10:43:31.000Z",
-          "status": "PRESENT",
-          "student_id": "1",
-          "student_name": "Hicham moussaid",
-          "timestamp": "170058"
+      "2026-01-12": {
+        "present": {
+          "S1": {
+            "name": "Ahmed Bouba",
+            "time": "08:45"
+          },
+          "S3": {
+            "name": "Lkhalidi Mohamed",
+            "time": "09:05"
+          }
+        }
+      },
+      "2026-01-30": {
+        "present": {
+          "S1": {
+            "name": "Ahmed Bouba",
+            "time": "08:45"
+          },
+          "S3": {
+            "name": "Lkhalidi Mohamed",
+            "time": "09:05"
+          }
+        }
+      },
+      "2026-01-31": {
+        "present": {
+          "S1": {
+            "name": "Ahmed Bouba",
+            "time": "08:45"
+          },
+          "S3": {
+            "name": "Lkhalidi Mohamed",
+            "time": "09:05"
+          }
+        }
+      },
+      "2026-02-01": {
+        "present": {
+          "S1": {
+            "name": "Ahmed Bouba",
+            "time": "08:30"
+          },
+          "S3": {
+            "name": "Lkhalidi Mohamed",
+            "time": "09:00"
+          }
+        }
+      },
+      "2026-02-03": {
+        "present": {
+          "S1": {
+            "name": "Ahmed Bouba",
+            "time": "08:50"
+          },
+          "S3": {
+            "name": "Lkhalidi Mohamed",
+            "time": "09:10"
+          }
+        }
+      },
+      "2026-02-04": {
+        "present": {
+          "S1": {
+            "name": "Ahmed Bouba",
+            "time": "08:45"
+          },
+          "S3": {
+            "name": "Lkhalidi Mohamed",
+            "time": "09:05"
+          }
+        }
+      },
+      "2026-02-05": {
+        "present": {
+          "S1": {
+            "name": "Ahmed Bouba",
+            "time": "08:40"
+          }
+        },
+        "absent": {
+          "S3": {
+            "name": "Lkhalidi Mohamed",
+            "time": "09:00"
+          }
+        }
+      }
+    },
+    "G2": {
+      "2026-01-12": {
+        "present": {
+          "S2": {
+            "name": "Hicham Moussaid",
+            "time": "08:50"
+          },
+          "S4": {
+            "name": "Amine El Hanine",
+            "time": "09:10"
+          }
+        }
+      },
+      "2026-01-30": {
+        "absent": {
+          "S4": {
+            "name": "Amine El Hanine"
+          }
+        },
+        "present": {
+          "S2": {
+            "name": "Hicham Moussaid",
+            "time": "08:50"
+          }
+        }
+      },
+      "2026-01-31": {
+        "absent": {
+          "S2": {
+            "name": "Hicham Moussaid"
+          },
+          "S4": {
+            "name": "Amine El Hanine"
+          }
+        }
+      },
+      "2026-02-01": {
+        "present": {
+          "S2": {
+            "name": "Hicham Moussaid",
+            "time": "08:45"
+          },
+          "S4": {
+            "name": "Amine El Hanine",
+            "time": "09:05"
+          }
+        }
+      },
+      "2026-02-03": {
+        "absent": {
+          "S4": {
+            "name": "Amine El Hanine",
+            "time": "09:15"
+          }
+        },
+        "present": {
+          "S2": {
+            "name": "Hicham Moussaid",
+            "time": "08:55"
+          }
+        }
+      },
+      "2026-12-26": {
+        "absent": {
+          "S4": {
+            "name": "Amine El Hanine"
+          }
+        },
+        "present": {
+          "S2": {
+            "name": "Hicham Moussaid",
+            "time": "08:50"
+          }
+        }
+      },
+      "2026-02-04": {
+        "present": {
+          "S2": {
+            "name": "Hicham Moussaid",
+            "time": "08:45"
+          },
+          "S4": {
+            "name": "Amine El Hanine",
+            "time": "09:05"
+          }
+        }
+      },
+      "2026-02-05": {
+        "present": {
+          "S2": {
+            "name": "Hicham Moussaid",
+            "time": "08:40"
+          },
+          "S4": {
+            "name": "Amine El Hanine",
+            "time": "09:00"
+          }
+        }
+      }
+    },
+    "G3": {
+      "2026-01-12": {
+        "present": {
+          "S5": {
+            "name": "Ibrahim Belkass",
+            "time": "08:50"
+          },
+          "S6": {
+            "name": "Hamze Abde",
+            "time": "09:10"
+          }
+        }
+      },
+      "2026-01-30": {
+        "absent": {
+          "S6": {
+            "name": "Hamze Abde"
+          }
+        },
+        "present": {
+          "S5": {
+            "name": "Ibrahim Belkass",
+            "time": "08:50"
+          }
+        }
+      },
+      "2026-01-31": {
+        "absent": {
+          "S5": {
+            "name": "Ibrahim Belkass"
+          },
+          "S6": {
+            "name": "Hamze Abde"
+          }
+        }
+      },
+      "2026-02-01": {
+        "absent": {
+          "S5": {
+            "name": "Ibrahim Belkass"
+          },
+          "S6": {
+            "name": "Hamze Abde"
+          }
+        }
+      },
+      "2026-02-03": {
+        "absent": {
+          "S6": {
+            "name": "Hamze Abde",
+            "time": "08:55"
+          }
+        },
+        "present": {
+          "S5": {
+            "name": "Ibrahim Belkass",
+            "time": "09:00"
+          }
+        }
+      },
+      "2026-12-26": {
+        "present": {
+          "S5": {
+            "name": "Ibrahim Belkass",
+            "time": "08:55"
+          },
+          "S6": {
+            "name": "Hamze Abde",
+            "time": "08:50"
+          }
+        }
+      },
+      "2026-02-04": {
+        "present": {
+          "S5": {
+            "name": "Ibrahim Belkass",
+            "time": "09:05"
+          },
+          "S6": {
+            "name": "Hamze Abde",
+            "time": "08:45"
+          }
+        }
+      },
+      "2026-02-05": {
+        "present": {
+          "S5": {
+            "name": "Ibrahim Belkass",
+            "time": "09:00"
+          },
+          "S6": {
+            "name": "Hamze Abde",
+            "time": "08:40"
+          }
         }
       }
     }
   },
   "groups": {
     "G1": {
+      "capacity": 30,
+      "description": "",
       "level": "Licence 1",
-      "name": "Groupe 1"
+      "name": "Groupe 1",
+      "updated_at": "2026-01-31T09:56:20.643750",
+      "year": 2026
     },
     "G2": {
+      "capacity": 30,
+      "description": "",
       "level": "Master 2",
-      "name": "Groupe 2"
+      "name": "Groupe 2",
+      "updated_at": "2026-01-31T09:56:29.769387",
+      "year": 2026
+    },
+    "G3": {
+      "capacity": 30,
+      "created_at": "2026-01-31T10:00:02.486487",
+      "description": "",
+      "level": "L3",
+      "name": "Groupe 3",
+      "updated_at": "2026-02-01T09:23:23.930081",
+      "year": 2025
     }
   },
   "rooms": {
     "roomA": {
       "active": true,
+      "capacity": "30",
+      "description": "",
+      "equipment": "Ordinateurs",
       "esp32_id": "ESP32_A",
-      "last_seen": "2025-12-26T10:30:49.755036",
+      "location": "Bloc B",
       "name": "Salle Robotics"
     },
     "roomB": {
       "active": true,
+      "capacity": "22",
+      "description": "",
+      "equipment": "Ordinateurs",
       "esp32_id": "ESP32_B",
-      "last_seen": "2025-12-26T10:31:39.582722",
+      "location": "Bloc D",
       "name": "Salle IoT"
+    },
+    "salle_info_1": {
+      "active": true,
+      "capacity": "35",
+      "description": "",
+      "equipment": "Projecteur, Ordinateurs",
+      "esp32_id": "ESP32_C",
+      "location": "Bloc A",
+      "name": "Salle info 1"
     }
   },
   "schedule": {
     "roomA": {
-      "monday": {
-        "08:00-10:00": {
+      "friday": [
+        {
+          "end": "10:00",
           "group": "G1",
+          "start": "08:00",
+          "subject": "iot"
+        }
+      ],
+      "monday": [
+        {
+          "end": "10:00",
+          "group": "G1",
+          "start": "08:00",
           "subject": "robotics"
         },
-        "10:15-12:15": {
+        {
+          "end": "12:00",
           "group": "G2",
+          "start": "10:00",
           "subject": "iot"
+        }
+      ],
+      "saturday": [
+        {
+          "end": "18:00",
+          "group": "G1",
+          "start": "16:00",
+          "subject": "iot"
+        }
+      ],
+      "wednesday": [
+        {
+          "end": "10:00",
+          "group": "G1",
+          "start": "08:00",
+          "subject": "robotics"
         },
-        "20:00-23:59": {
+        {
+          "end": "12:00",
           "group": "G1",
+          "start": "10:00",
           "subject": "iot"
         }
-      },
-      "tuesday": {
-        "09:00-11:00": {
-          "group": "G1",
-          "subject": "iot"
-        }
-      },
-      "wednesday": {
-        "08:00-10:00": {
-          "group": "G2",
-          "subject": "iot"
-        }
-      }
+      ]
     },
     "roomB": {
-      "monday": {
-        "08:00-10:00": {
+      "monday": [
+        {
+          "end": "10:00",
           "group": "G2",
+          "start": "08:00",
+          "subject": "robotics"
+        },
+        {
+          "end": "12:00",
+          "group": "G1",
+          "start": "10:00",
+          "subject": "iot"
+        }
+      ],
+      "saturday": [
+        {
+          "end": "10:00",
+          "group": "G1",
+          "start": "08:00",
+          "subject": "iot"
+        },
+        {
+          "end": "12:00",
+          "group": "G3",
+          "start": "10:00",
+          "subject": "robotics"
+        },
+        {
+          "end": "18:00",
+          "group": "G2",
+          "start": "16:00",
           "subject": "robotics"
         }
-      }
+      ],
+      "wednesday": [
+        {
+          "end": "10:00",
+          "group": "G2",
+          "start": "08:00",
+          "subject": "robotics"
+        },
+        {
+          "end": "12:00",
+          "group": "G1",
+          "start": "10:00",
+          "subject": "iot"
+        }
+      ]
+    },
+    "salle_info_1": {
+      "saturday": [
+        {
+          "end": "18:00",
+          "group": "G3",
+          "start": "16:00",
+          "subject": "iot"
+        }
+      ]
     }
   },
   "sessions": {
-    "2025-01-15": {
+    "2026-01-31": {
       "roomA": {
-        "date": "2025-01-15",
-        "end": "10:00",
-        "group": "G1",
-        "room": "roomA",
-        "start": "08:00",
-        "stats": {
-          "absent": 2,
-          "present": 28,
-          "total": 30
+        "16:00_18:00": {
+          "created_at": "2026-01-31T10:40:03.152439",
+          "date": "2026-01-31",
+          "end": "18:00",
+          "group": "G1",
+          "room": "roomA",
+          "room_name": "Salle Robotics",
+          "start": "16:00",
+          "status": "SCHEDULED",
+          "subject": "iot"
+        }
+      },
+      "roomB": {
+        "08:00_10:00": {
+          "created_at": "2026-01-31T10:40:03.495441",
+          "date": "2026-01-31",
+          "end": "10:00",
+          "group": "G1",
+          "room": "roomB",
+          "room_name": "Salle IoT",
+          "start": "08:00",
+          "status": "SCHEDULED",
+          "subject": "iot"
         },
-        "status": "CLOSED",
-        "subject": "robotics"
+        "10:00_12:00": {
+          "created_at": "2026-01-31T10:40:03.826571",
+          "date": "2026-01-31",
+          "end": "12:00",
+          "group": "G3",
+          "room": "roomB",
+          "room_name": "Salle IoT",
+          "start": "10:00",
+          "status": "SCHEDULED",
+          "subject": "robotics"
+        },
+        "16:00_18:00": {
+          "created_at": "2026-01-31T10:40:04.162194",
+          "date": "2026-01-31",
+          "end": "18:00",
+          "group": "G2",
+          "room": "roomB",
+          "room_name": "Salle IoT",
+          "start": "16:00",
+          "status": "SCHEDULED",
+          "subject": "robotics"
+        }
+      },
+      "salle_info_1": {
+        "16:00_18:00": {
+          "created_at": "2026-01-31T10:40:04.500883",
+          "date": "2026-01-31",
+          "end": "18:00",
+          "group": "G3",
+          "room": "salle_info_1",
+          "room_name": "Salle info 1",
+          "start": "16:00",
+          "status": "SCHEDULED",
+          "subject": "iot"
+        }
       }
     }
   },
-  "students": [
-    {
+  "students": {
+    "S1": {
       "active": true,
-      "email": "",
+      "email": "Bouba@gmail.com",
       "fingerprint_id": 1,
       "group": "G1",
-      "name": "Ahmed Bouba",
-      "phone": "",
-      "updated_at": "2025-12-26T09:48:41.132665"
+      "name": "Ahmed Bouba"
     },
-    {
+    "S2": {
       "active": true,
-      "email": "",
+      "email": "Moussaid@gmail.com",
       "fingerprint_id": 2,
       "group": "G2",
-      "name": "Hicham moussaid",
-      "phone": "",
-      "updated_at": "2025-12-23T10:38:02.215081"
+      "name": "Hicham Moussaid"
     },
-    {
+    "S3": {
       "active": true,
       "email": "Lkhalidi@gmail.com",
       "fingerprint_id": 4,
       "group": "G1",
-      "name": "Lkhalidi Mohamed",
+      "name": "Lkhalidi Mohamed"
+    },
+    "S4": {
+      "active": true,
+      "email": "Elhanine@gmail.com",
+      "fingerprint_id": 5,
+      "group": "G2",
+      "name": "Amine El Hanine",
       "phone": "",
-      "updated_at": "2025-12-26T09:49:21.954254"
+      "updated_at": "2026-02-01T09:24:44.548033"
+    },
+    "S5": {
+      "active": true,
+      "email": "Ibra@gmail.com",
+      "fingerprint_id": 6,
+      "group": "G3",
+      "name": "Ibrahim Belkass",
+      "phone": "",
+      "updated_at": "2026-02-01T09:25:08.840731"
+    },
+    "S6": {
+      "active": true,
+      "email": "Hamze@gmail.com",
+      "fingerprint_id": 7,
+      "group": "G3",
+      "name": "Hamze Abde",
+      "phone": "",
+      "updated_at": "2026-02-01T09:25:48.480659"
+    },
+    "S7": {
+      "active": true,
+      "email": "messi@gmail.com",
+      "fingerprint_id": 9,
+      "group": "G1",
+      "name": "Leo Messi",
+      "phone": "",
+      "updated_at": "2026-02-01T12:01:16.434436"
     }
-  ],
+  },
   "subjects": {
+    "big_data": {
+      "credits": 3,
+      "description": "",
+      "level": "Master 1",
+      "name": "Big Data",
+      "semester": "S2",
+      "teacher_id": "T2"
+    },
     "iot": {
+      "credits": 3,
+      "level": "Licence 1",
       "name": "Internet of Things",
-      "teacher": "Dr. Y"
+      "semester": "S2",
+      "teacher_id": "T2"
+    },
+    "python": {
+      "credits": 5,
+      "description": "",
+      "level": "Licence 1",
+      "name": "Python",
+      "semester": "S1",
+      "teacher_id": "T1"
     },
     "robotics": {
+      "credits": 3,
+      "level": "Licence 3",
       "name": "Robotics",
-      "teacher": "Dr. X"
+      "semester": "S1",
+      "teacher_id": "T1"
+    }
+  },
+  "teachers": {
+    "T1": {
+      "name": "Dr. X"
+    },
+    "T2": {
+      "name": "Dr. Y"
     }
   }
 }
