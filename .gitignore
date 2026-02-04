@@ -1,0 +1,108 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.bak
+*.tmp
+
+# Dependency directories
+node_modules/
+jspm_packages/
+# Optional npm cache directory
+.npm
+# Optional eslint cache
+.eslintcache
+# Optional stylelint cache
+.stylelintcache
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+
+# Build output
+build/
+coverage/
+.nyc_output/
+.out/
+
+# Miscellaneous
+.env
+.env.test
+.env.production
+.env.local
+.env.*.local
+.cache/
+.next/
+
+# Storybook build outputs
+.out-storybook/
+storybook-static/
+
+# Environment files
+.env
+.env.*
+!.env.example
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Docker secrets
+docker-compose.override.yml
+docker-compose.prod.yml
+
+# Sensitive data
+*.pem
+*.key
+*.crt
+*.pfx
+
+
+
+# MacOS files
+.DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+# Virtual environment
+venv/
+ENV/
+env/
+.venv/
+env.bak/
+venv.bak/
+
+# Static site generators
+.cache/
+.next/
+.nuxt/
+.public/
+.docs/
+.site/
+
+docs/
