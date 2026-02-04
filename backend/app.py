@@ -10,10 +10,10 @@ from routes.rooms import rooms_bp
 from routes.groups import groups_bp
 from routes.subjects import subjects_bp
 from routes.schedule import schedule_bp
-from routes.sessions import sessions_bp
+from routes.sessions import sessions_bp, init_scheduler
 from routes.attendance import attendance_bp
 from routes.dashboard import dashboard_bp
-from routes.esp32 import esp32_bp
+from routes.teachers import teachers_bp
 
 # Create Flask app
 app = Flask(__name__)
@@ -31,7 +31,7 @@ app.register_blueprint(schedule_bp)
 app.register_blueprint(sessions_bp)
 app.register_blueprint(attendance_bp)
 app.register_blueprint(dashboard_bp)
-app.register_blueprint(esp32_bp)
+app.register_blueprint(teachers_bp)
 
 # ================ MAIN ROUTES ================
 @app.route('/')
@@ -49,12 +49,8 @@ def home():
             'schedule': '/api/schedule',
             'sessions': '/api/sessions',
             'attendance': '/api/attendance',
+            'teachers': '/api/teachers',
             'dashboard': '/api/dashboard/stats',
-            'esp32': {
-                'health': '/api/esp32/health',
-                'status': '/api/esp32/status',
-                'ping': '/api/esp32/ping (POST)'
-            }
         }
     })
 
@@ -81,18 +77,13 @@ def internal_error(error):
 def bad_request(error):
     return jsonify({'success': False, 'error': 'Bad request'}), 400
 
+init_scheduler(app)
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("=" * 60)
-    print(f"🚀 IoT Attendance System - Fingerprint Only")
+    print(f"IoT Attendance System - Fingerprint Only")
     print("=" * 60)
-    print(f"📡 Server started on http://localhost:{port}")
-    print(f"📚 API documentation on http://localhost:{port}/")
-    print(f"🔧 Debug mode: {app.debug}")
-    print("\n🎯 Architecture: ESP32-driven, Fingerprint Authentication")
-    print("👆 Authentication: Fingerprint only (no RFID)")
-    print("📅 Sessions: Automatically started by ESP32 based on schedule")
-    print("📊 Attendance: Recorded in real-time via fingerprint")
-    print("📈 Statistics: Automatic calculation on session closure")
+    print(f"Server started on http://localhost:{port}")
     print("=" * 60)
     app.run(host='0.0.0.0', port=port, debug=True)

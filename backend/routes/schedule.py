@@ -1,9 +1,16 @@
 # routes/schedule.py
 from flask import Blueprint, request, jsonify
 from firebase_config import firebase
-from utils import get_day_of_week
+from datetime import datetime
+import calendar
 
 schedule_bp = Blueprint('schedule', __name__)
+
+def get_day_of_week():
+    """Get current day of week in lowercase"""
+    days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+    today_index = datetime.now().weekday()
+    return days[today_index]
 
 @schedule_bp.route('/api/schedule', methods=['GET'])
 def get_schedule():
@@ -14,10 +21,44 @@ def get_schedule():
         # Get additional data for better UI
         enhanced_schedule = {}
         for room_id, room_schedule in schedule.items():
+            if not isinstance(room_schedule, dict):
+                continue
+                
             room_data = firebase.get_one('rooms', room_id) or {}
+            enhanced_room_schedule = {}
+            
+            for day, day_schedule in room_schedule.items():
+                if isinstance(day_schedule, list):
+                    enhanced_day_schedule = []
+                    for session in day_schedule:
+                        if isinstance(session, dict):
+                            # Enhance with group and subject names
+                            group_data = firebase.get_one('groups', session.get('group')) or {}
+                            subject_data = firebase.get_one('subjects', session.get('subject')) or {}
+                            
+                            enhanced_session = {
+                                **session,
+                                'group_name': group_data.get('name', session.get('group')),
+                                'subject_name': subject_data.get('name', session.get('subject')),
+                                'teacher_id': subject_data.get('teacher_id'),
+                                'teacher_name': None
+                            }
+                            
+                            # Get teacher name if available
+                            if subject_data.get('teacher_id'):
+                                teacher_data = firebase.get_one('teachers', subject_data['teacher_id']) or {}
+                                enhanced_session['teacher_name'] = teacher_data.get('name')
+                            
+                            enhanced_day_schedule.append(enhanced_session)
+                    
+                    enhanced_room_schedule[day] = enhanced_day_schedule
+                else:
+                    enhanced_room_schedule[day] = day_schedule
+            
             enhanced_schedule[room_id] = {
                 'room_name': room_data.get('name', room_id),
-                'schedule': room_schedule
+                'room_data': room_data,
+                'schedule': enhanced_room_schedule
             }
         
         return jsonify({
@@ -38,20 +79,29 @@ def get_room_schedule(room_id):
         room = firebase.get_one('rooms', room_id) or {}
         
         if day:
-            day_schedule = schedule.get(day, {})
+            day = day.lower()
+            day_schedule = schedule.get(day, [])
+            
             # Enhance with subject and group names
-            enhanced_schedule = {}
-            for time_slot, slot_data in day_schedule.items():
-                if isinstance(slot_data, dict):
-                    group_data = firebase.get_one('groups', slot_data.get('group')) or {}
-                    subject_data = firebase.get_one('subjects', slot_data.get('subject')) or {}
+            enhanced_schedule = []
+            for session in day_schedule:
+                if isinstance(session, dict):
+                    group_data = firebase.get_one('groups', session.get('group')) or {}
+                    subject_data = firebase.get_one('subjects', session.get('subject')) or {}
                     
-                    enhanced_schedule[time_slot] = {
-                        **slot_data,
-                        'group_name': group_data.get('name', slot_data.get('group')),
-                        'subject_name': subject_data.get('name', slot_data.get('subject')),
-                        'teacher': subject_data.get('teacher', '')
+                    enhanced_session = {
+                        **session,
+                        'group_name': group_data.get('name', session.get('group')),
+                        'subject_name': subject_data.get('name', session.get('subject')),
+                        'teacher_id': subject_data.get('teacher_id')
                     }
+                    
+                    # Get teacher name if available
+                    if subject_data.get('teacher_id'):
+                        teacher_data = firebase.get_one('teachers', subject_data['teacher_id']) or {}
+                        enhanced_session['teacher_name'] = teacher_data.get('name')
+                    
+                    enhanced_schedule.append(enhanced_session)
             
             return jsonify({
                 'success': True,
@@ -78,21 +128,28 @@ def get_today_schedule(room_id):
         # Get room info
         room = firebase.get_one('rooms', room_id) or {}
         
-        today_schedule = schedule.get(today_day, {})
+        today_schedule = schedule.get(today_day, [])
         
         # Enhance with subject and group names
-        enhanced_schedule = {}
-        for time_slot, slot_data in today_schedule.items():
-            if isinstance(slot_data, dict):
-                group_data = firebase.get_one('groups', slot_data.get('group')) or {}
-                subject_data = firebase.get_one('subjects', slot_data.get('subject')) or {}
+        enhanced_schedule = []
+        for session in today_schedule:
+            if isinstance(session, dict):
+                group_data = firebase.get_one('groups', session.get('group')) or {}
+                subject_data = firebase.get_one('subjects', session.get('subject')) or {}
                 
-                enhanced_schedule[time_slot] = {
-                    **slot_data,
-                    'group_name': group_data.get('name', slot_data.get('group')),
-                    'subject_name': subject_data.get('name', slot_data.get('subject')),
-                    'teacher': subject_data.get('teacher', '')
+                enhanced_session = {
+                    **session,
+                    'group_name': group_data.get('name', session.get('group')),
+                    'subject_name': subject_data.get('name', session.get('subject')),
+                    'teacher_id': subject_data.get('teacher_id')
                 }
+                
+                # Get teacher name if available
+                if subject_data.get('teacher_id'):
+                    teacher_data = firebase.get_one('teachers', subject_data['teacher_id']) or {}
+                    enhanced_session['teacher_name'] = teacher_data.get('name')
+                
+                enhanced_schedule.append(enhanced_session)
         
         return jsonify({
             'success': True,
@@ -103,13 +160,71 @@ def get_today_schedule(room_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@schedule_bp.route('/api/schedule/active', methods=['GET'])
+def get_active_schedule():
+    """Get currently active schedule for all rooms"""
+    try:
+        today_day = get_day_of_week()
+        current_time = datetime.now().strftime('%H:%M')
+        
+        all_schedule = firebase.get_all('schedule') or {}
+        active_sessions = []
+        
+        for room_id, room_schedule in all_schedule.items():
+            if not isinstance(room_schedule, dict):
+                continue
+            
+            # Get today's schedule for this room
+            today_sessions = room_schedule.get(today_day, [])
+            
+            for session in today_sessions:
+                if not isinstance(session, dict):
+                    continue
+                
+                session_start = session.get('start', '')
+                session_end = session.get('end', '')
+                
+                # Check if current time is within session time
+                if session_start <= current_time <= session_end:
+                    # Get additional info
+                    room_data = firebase.get_one('rooms', room_id) or {}
+                    group_data = firebase.get_one('groups', session.get('group')) or {}
+                    subject_data = firebase.get_one('subjects', session.get('subject')) or {}
+                    
+                    active_session = {
+                        'room_id': room_id,
+                        'room_name': room_data.get('name', room_id),
+                        'session': {
+                            **session,
+                            'group_name': group_data.get('name', session.get('group')),
+                            'subject_name': subject_data.get('name', session.get('subject'))
+                        }
+                    }
+                    
+                    # Get teacher info if available
+                    if subject_data.get('teacher_id'):
+                        teacher_data = firebase.get_one('teachers', subject_data['teacher_id']) or {}
+                        active_session['session']['teacher_name'] = teacher_data.get('name')
+                    
+                    active_sessions.append(active_session)
+        
+        return jsonify({
+            'success': True,
+            'current_time': current_time,
+            'day': today_day,
+            'active_sessions': active_sessions,
+            'count': len(active_sessions)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @schedule_bp.route('/api/schedule/entry', methods=['POST'])
 def add_schedule_entry():
     """Add schedule entry"""
     try:
         data = request.get_json()
         
-        required_fields = ['room', 'day', 'time_slot', 'group', 'subject']
+        required_fields = ['room', 'day', 'start', 'end', 'group', 'subject']
         if not all(field in data for field in required_fields):
             return jsonify({
                 'success': False,
@@ -118,13 +233,8 @@ def add_schedule_entry():
         
         room_id = data['room']
         day = data['day'].lower()
-        time_slot = data['time_slot']
-        
-        # Validate time slot format (HH:MM-HH:MM)
-        try:
-            start_time, end_time = time_slot.split('-')
-        except ValueError:
-            return jsonify({'success': False, 'error': 'Invalid time slot format. Use HH:MM-HH:MM'}), 400
+        start_time = data['start']
+        end_time = data['end']
         
         # Check if room exists
         room = firebase.get_one('rooms', room_id)
@@ -141,16 +251,52 @@ def add_schedule_entry():
         if not subject:
             return jsonify({'success': False, 'error': 'Subject not found'}), 404
         
-        entry_data = {
+        # Validate time format
+        try:
+            datetime.strptime(start_time, '%H:%M')
+            datetime.strptime(end_time, '%H:%M')
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid time format. Use HH:MM'}), 400
+        
+        # Check for time conflicts in the same room and day
+        existing_schedule = firebase.get_all(f'schedule/{room_id}/{day}') or []
+        
+        for existing_session in existing_schedule:
+            if not isinstance(existing_session, dict):
+                continue
+            
+            existing_start = existing_session.get('start', '')
+            existing_end = existing_session.get('end', '')
+            
+            # Check for time overlap
+            if not (end_time <= existing_start or start_time >= existing_end):
+                return jsonify({
+                    'success': False,
+                    'error': f'Time conflict with existing session: {existing_start}-{existing_end}'
+                }), 400
+        
+        # Create new session entry
+        new_entry = {
+            'start': start_time,
+            'end': end_time,
             'group': data['group'],
             'subject': data['subject']
         }
         
-        firebase.update('schedule', f'{room_id}/{day}/{time_slot}', entry_data)
+        # Get existing schedule for this room and day
+        day_schedule = existing_schedule.copy()
+        day_schedule.append(new_entry)
+        
+        # Sort by start time
+        day_schedule.sort(key=lambda x: x.get('start', ''))
+        
+        # Update the schedule
+        firebase.update('schedule', f'{room_id}/{day}', day_schedule)
         
         return jsonify({
             'success': True,
-            'message': 'Schedule entry added'
+            'message': 'Schedule entry added',
+            'data': new_entry
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -161,7 +307,7 @@ def delete_schedule_entry():
     try:
         data = request.get_json()
         
-        required_fields = ['room', 'day', 'time_slot']
+        required_fields = ['room', 'day', 'start', 'end']
         if not all(field in data for field in required_fields):
             return jsonify({
                 'success': False,
@@ -170,18 +316,89 @@ def delete_schedule_entry():
         
         room_id = data['room']
         day = data['day'].lower()
-        time_slot = data['time_slot']
+        start_time = data['start']
+        end_time = data['end']
         
-        path = f'{room_id}/{day}/{time_slot}'
-        existing_entry = firebase.get_one('schedule', path)
-        if not existing_entry:
+        # Get existing schedule for this room and day
+        day_schedule = firebase.get_all(f'schedule/{room_id}/{day}') or []
+        
+        # Find and remove the entry
+        updated_schedule = []
+        found = False
+        
+        for session in day_schedule:
+            if not isinstance(session, dict):
+                continue
+            
+            if session.get('start') == start_time and session.get('end') == end_time:
+                found = True
+                continue  # Skip this entry (remove it)
+            
+            updated_schedule.append(session)
+        
+        if not found:
             return jsonify({'success': False, 'error': 'Schedule entry not found'}), 404
         
-        firebase.delete('schedule', path)
+        # Update the schedule
+        firebase.update('schedule', f'{room_id}/{day}', updated_schedule)
         
         return jsonify({
             'success': True,
             'message': 'Schedule entry deleted'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@schedule_bp.route('/api/schedule/week', methods=['GET'])
+def get_week_schedule():
+    """Get schedule for the entire week"""
+    try:
+        days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        
+        all_schedule = firebase.get_all('schedule') or {}
+        week_schedule = {}
+        
+        for room_id, room_schedule in all_schedule.items():
+            if not isinstance(room_schedule, dict):
+                continue
+            
+            room_data = firebase.get_one('rooms', room_id) or {}
+            room_week_schedule = {}
+            
+            for day in days:
+                day_schedule = room_schedule.get(day, [])
+                
+                # Enhance with group and subject names
+                enhanced_day_schedule = []
+                for session in day_schedule:
+                    if isinstance(session, dict):
+                        group_data = firebase.get_one('groups', session.get('group')) or {}
+                        subject_data = firebase.get_one('subjects', session.get('subject')) or {}
+                        
+                        enhanced_session = {
+                            **session,
+                            'group_name': group_data.get('name', session.get('group')),
+                            'subject_name': subject_data.get('name', session.get('subject'))
+                        }
+                        
+                        # Get teacher name if available
+                        if subject_data.get('teacher_id'):
+                            teacher_data = firebase.get_one('teachers', subject_data['teacher_id']) or {}
+                            enhanced_session['teacher_name'] = teacher_data.get('name')
+                        
+                        enhanced_day_schedule.append(enhanced_session)
+                
+                room_week_schedule[day] = enhanced_day_schedule
+            
+            week_schedule[room_id] = {
+                'room_name': room_data.get('name', room_id),
+                'room_data': room_data,
+                'schedule': room_week_schedule
+            }
+        
+        return jsonify({
+            'success': True,
+            'data': week_schedule
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

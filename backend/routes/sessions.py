@@ -1,62 +1,278 @@
 # routes/sessions.py
-from flask import Blueprint, request, jsonify
-from datetime import datetime
+from flask import Blueprint, request, jsonify, current_app
+from datetime import datetime, timedelta
 from firebase_config import firebase
-from utils import get_day_of_week, check_for_scheduled_session, get_room_by_esp32_id, calculate_session_stats
+from sessions_utils import get_day_of_week, get_room_by_esp32_id, calculate_session_stats
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import atexit
+import threading
 
 sessions_bp = Blueprint('sessions', __name__)
 
+# Initialize scheduler globally
+scheduler = None
+
+def init_scheduler(app):
+    """Initialize APScheduler with Flask app"""
+    global scheduler
+    
+    if scheduler is not None and scheduler.running:
+        print("⚠️ Scheduler already running, skipping initialization")
+        return scheduler
+    
+    scheduler = BackgroundScheduler()
+    
+    # Use app context wrapper for jobs
+    def job_with_context(job_func):
+        """Wrapper to run jobs with Flask app context"""
+        def wrapped_job():
+            with app.app_context():
+                job_func()
+        return wrapped_job
+    
+    # Schedule daily session generation at 08:00
+    scheduler.add_job(
+        func=job_with_context(generate_daily_sessions_job),
+        trigger=CronTrigger(hour=8, minute=0),
+        id='daily_session_generation',
+        name='Generate daily sessions at 08:00',
+        replace_existing=True
+    )
+    scheduler.add_job(
+        func=job_with_context(generate_daily_sessions_job),
+        trigger=CronTrigger(hour=13, minute=34),
+        id='daily_session_generation',
+        name='Generate daily sessions at 13:34',
+        replace_existing=True
+    )
+    
+    # Schedule auto-closing of sessions every minute
+    scheduler.add_job(
+        func=job_with_context(auto_close_completed_sessions_job),
+        trigger='interval',
+        minutes=1,
+        id='auto_close_sessions',
+        name='Auto-close completed sessions every minute',
+        replace_existing=True
+    )
+    
+    scheduler.start()
+    
+    print("✅ APScheduler started with 2 jobs:")
+    for job in scheduler.get_jobs():
+        print(f"   - {job.name} (next run: {job.next_run_time})")
+    
+    # Shut down scheduler when app exits
+    atexit.register(shutdown_scheduler)
+    
+    return scheduler
+
+def shutdown_scheduler():
+    """Shutdown scheduler"""
+    global scheduler
+    if scheduler and scheduler.running:
+        scheduler.shutdown()
+        scheduler = None
+        print("🛑 Scheduler shutdown")
+
+# Job functions - NO app context handling here, handled by wrapper
+def generate_daily_sessions_job():
+    """Generate sessions for today based on schedule"""
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        day_of_week = get_day_of_week(today).lower()
+        
+        print(f"🔄 Generating sessions for {today} ({day_of_week})...")
+        
+        schedule = firebase.get_all('schedule') or {}
+        sessions_created = 0
+        
+        for room_id, room_schedule in schedule.items():
+            if day_of_week in room_schedule:
+                day_sessions = room_schedule[day_of_week]
+                
+                if isinstance(day_sessions, list):
+                    for session_data in day_sessions:
+                        if isinstance(session_data, dict):
+                            # Create unique session key
+                            session_key = f"{today}/{room_id}/{session_data.get('start')}_{session_data.get('end')}"
+                            
+                            # Check if session already exists
+                            existing_session = firebase.get_one('sessions', session_key)
+                            if existing_session:
+                                continue
+                            
+                            # Create session entry
+                            session_entry = {
+                                'date': today,
+                                'room': room_id,
+                                'start': session_data.get('start'),
+                                'end': session_data.get('end'),
+                                'group': session_data.get('group'),
+                                'subject': session_data.get('subject'),
+                                'status': 'SCHEDULED',
+                                'created_at': datetime.now().isoformat()
+                            }
+                            
+                            # Get room info
+                            room = firebase.get_one('rooms', room_id) or {}
+                            if room:
+                                session_entry['room_name'] = room.get('name', room_id)
+                            
+                            # Save session
+                            firebase.create('sessions', session_entry, session_key)
+                            sessions_created += 1
+                            print(f"   📅 Created session: {room_id} at {session_data.get('start')}-{session_data.get('end')}")
+        
+        print(f"✅ Generated {sessions_created} sessions for {today}")
+        
+    except Exception as e:
+        print(f"❌ Error generating daily sessions: {str(e)}")
+
+def auto_close_completed_sessions_job():
+    """Auto-close sessions that have passed their end time"""
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        current_time = datetime.now().strftime('%H:%M')
+        current_datetime = datetime.now()
+        
+        # Get all sessions for today
+        all_sessions = firebase.get_all('sessions') or {}
+        sessions_closed = 0
+        
+        for session_key, session in all_sessions.items():
+            if (isinstance(session, dict) and 
+                session.get('date') == today and 
+                session.get('status') == 'ACTIVE'):
+                
+                session_end = session.get('end')
+                
+                # Parse end time
+                if session_end:
+                    try:
+                        end_hour, end_minute = map(int, session_end.split(':'))
+                        end_time = current_datetime.replace(
+                            hour=end_hour, 
+                            minute=end_minute, 
+                            second=0, 
+                            microsecond=0
+                        )
+                        
+                        # Add 5 minutes grace period
+                        end_time_with_grace = end_time + timedelta(minutes=5)
+                        
+                        # Check if current time is past end time + grace period
+                        if current_datetime > end_time_with_grace:
+                            room_id = session.get('room')
+                            group_id = session.get('group')
+                            
+                            # Calculate attendance stats
+                            stats = calculate_session_stats(today, room_id, group_id)
+                            
+                            if stats:
+                                # Close session
+                                session['status'] = 'CLOSED'
+                                session['closed_at'] = datetime.now().isoformat()
+                                session['stats'] = stats
+                                session['auto_closed'] = True
+                                
+                                firebase.update('sessions', session_key, session)
+                                sessions_closed += 1
+                                
+                                print(f"   ⏹️ Auto-closed session: {session_key}")
+                    except ValueError:
+                        print(f"Invalid time format in session {session_key}: {session_end}")
+                        continue
+        
+        if sessions_closed > 0:
+            print(f"✅ Auto-closed {sessions_closed} sessions at {current_time}")
+            
+    except Exception as e:
+        print(f"❌ Error auto-closing sessions: {str(e)}")
+
+# ================ API ENDPOINTS ================
+
 @sessions_bp.route('/api/sessions', methods=['GET'])
 def get_sessions():
-    """Get sessions with filters"""
+    """Get all sessions with optional filters"""
     try:
         date = request.args.get('date')
         room = request.args.get('room')
         status = request.args.get('status')
-        group = request.args.get('group')
-        subject = request.args.get('subject')
         
         all_sessions = firebase.get_all('sessions') or {}
         filtered_sessions = []
         
-        for session_date, rooms_data in all_sessions.items():
-            if date and session_date != date:
+        for session_key, session_data in all_sessions.items():
+            if not isinstance(session_data, dict):
+                continue
+                
+            if date and session_data.get('date') != date:
                 continue
             
-            for room_id, session_data in rooms_data.items():
-                if room and room_id != room:
-                    continue
-                if status and session_data.get('status') != status:
-                    continue
-                if group and session_data.get('group') != group:
-                    continue
-                if subject and session_data.get('subject') != subject:
-                    continue
-                
-                # Get additional info
-                room_data = firebase.get_one('rooms', room_id) or {}
-                group_data = firebase.get_one('groups', session_data.get('group')) or {}
-                subject_data = firebase.get_one('subjects', session_data.get('subject')) or {}
-                
-                enhanced_session = {
-                    'date': session_date,
-                    'room': room_id,
-                    **session_data,
-                    'room_name': room_data.get('name', room_id),
-                    'group_name': group_data.get('name', session_data.get('group')),
-                    'subject_name': subject_data.get('name', session_data.get('subject')),
-                    'teacher': subject_data.get('teacher', '')
-                }
-                
-                filtered_sessions.append(enhanced_session)
+            if room and session_data.get('room') != room:
+                continue
+            
+            if status and session_data.get('status') != status:
+                continue
+            
+            # Get room info
+            room_data = firebase.get_one('rooms', session_data.get('room')) or {}
+            
+            enhanced_session = {
+                'id': session_key,
+                **session_data,
+                'room_name': room_data.get('name', session_data.get('room')),
+                'room_active': room_data.get('active', False)
+            }
+            
+            filtered_sessions.append(enhanced_session)
         
-        # Sort by date and time
-        filtered_sessions.sort(key=lambda x: (x.get('date', ''), x.get('start', '')), reverse=True)
+        # Sort by date and start time
+        filtered_sessions.sort(key=lambda x: (
+            x.get('date', ''),
+            x.get('start', '')
+        ), reverse=True)
         
         return jsonify({
             'success': True,
             'data': filtered_sessions,
             'count': len(filtered_sessions)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@sessions_bp.route('/api/sessions/today', methods=['GET'])
+def get_today_sessions():
+    """Get today's sessions"""
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        all_sessions = firebase.get_all('sessions') or {}
+        today_sessions = []
+        
+        for session_key, session_data in all_sessions.items():
+            if isinstance(session_data, dict) and session_data.get('date') == today:
+                # Get room info
+                room_data = firebase.get_one('rooms', session_data.get('room')) or {}
+                
+                enhanced_session = {
+                    'id': session_key,
+                    **session_data,
+                    'room_name': room_data.get('name', session_data.get('room')),
+                    'room_active': room_data.get('active', False)
+                }
+                
+                today_sessions.append(enhanced_session)
+        
+        # Sort by start time
+        today_sessions.sort(key=lambda x: x.get('start', ''))
+        
+        return jsonify({
+            'success': True,
+            'data': today_sessions,
+            'count': len(today_sessions)
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -69,61 +285,44 @@ def check_session():
         if not esp32_id:
             return jsonify({'success': False, 'error': 'esp32_id required'}), 400
         
-        session_path, session = check_for_scheduled_session(esp32_id)
+        # Find room by ESP32 ID
+        room_id, room = get_room_by_esp32_id(esp32_id)
+        if not room_id:
+            return jsonify({'success': False, 'error': 'Room not found for ESP32'}), 404
         
-        if session_path:
-            return jsonify({
-                'success': True,
-                'session_path': session_path,
-                'session': session,
-                'message': 'Scheduled session found'
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'message': session  # Error message is in session variable
-            })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@sessions_bp.route('/api/sessions/start', methods=['POST'])
-def start_session_esp32():
-    """Start session for ESP32"""
-    try:
-        esp32_id = request.args.get('esp32_id')
-        if not esp32_id:
-            return jsonify({'success': False, 'error': 'esp32_id required'}), 400
-        
-        # Check if there's a scheduled session
-        session_path, session = check_for_scheduled_session(esp32_id)
-        
-        if not session_path:
-            return jsonify({'success': False, 'error': 'No scheduled session'}), 404
-        
-        # Extract date and room from session
         today = datetime.now().strftime('%Y-%m-%d')
-        room_id, _ = get_room_by_esp32_id(esp32_id)
+        current_time = datetime.now().strftime('%H:%M')
         
-        # Start session
-        session_data = firebase.get_all(f'sessions/{today}/{room_id}') or {}
-        if isinstance(session_data, dict):
-            session_data['status'] = 'ACTIVE'
-            session_data['started_at'] = datetime.now().isoformat()
-            
-            firebase.update('sessions', f'{today}/{room_id}', session_data)
+        # Find active session for this room today
+        all_sessions = firebase.get_all('sessions') or {}
+        
+        for session_key, session in all_sessions.items():
+            if (isinstance(session, dict) and
+                session.get('date') == today and
+                session.get('room') == room_id and
+                session.get('status') in ['SCHEDULED', 'ACTIVE']):
+                
+                session_start = session.get('start')
+                session_end = session.get('end')
+                
+                if session_start <= current_time <= session_end:
+                    return jsonify({
+                        'success': True,
+                        'session_path': session_key,
+                        'session': session,
+                        'message': 'Session found'
+                    })
         
         return jsonify({
-            'success': True,
-            'message': 'Session started successfully',
-            'session_path': session_path,
-            'session': session_data
+            'success': False,
+            'message': 'No active session found'
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@sessions_bp.route('/api/sessions/stop', methods=['POST'])
-def stop_session_esp32():
-    """Stop session for ESP32"""
+@sessions_bp.route('/api/sessions/start', methods=['POST'])
+def start_session():
+    """Start a session (can be called by ESP32)"""
     try:
         esp32_id = request.args.get('esp32_id')
         if not esp32_id:
@@ -134,142 +333,198 @@ def stop_session_esp32():
         if not room_id:
             return jsonify({'success': False, 'error': 'Room not found'}), 404
         
-        # Find active session for this room today
         today = datetime.now().strftime('%Y-%m-%d')
-        session_data = firebase.get_all(f'sessions/{today}/{room_id}')
+        current_time = datetime.now().strftime('%H:%M')
         
-        if not session_data or session_data.get('status') != 'ACTIVE':
-            return jsonify({'success': False, 'error': 'No active session'}), 404
+        # Find scheduled session for this room
+        all_sessions = firebase.get_all('sessions') or {}
+        session_to_start = None
+        session_key = None
         
-        # Calculate statistics and mark absences
-        stats = calculate_session_stats(today, room_id, session_data.get('group'))
+        for key, session in all_sessions.items():
+            if (isinstance(session, dict) and
+                session.get('date') == today and
+                session.get('room') == room_id and
+                session.get('status') == 'SCHEDULED'):
+                
+                session_start = session.get('start')
+                session_end = session.get('end')
+                
+                # Allow starting 15 minutes before scheduled time
+                if session_start <= current_time <= session_end:
+                    session_to_start = session
+                    session_key = key
+                    break
+        
+        if not session_to_start:
+            return jsonify({'success': False, 'error': 'No scheduled session found'}), 404
+        
+        # Start the session
+        session_to_start['status'] = 'ACTIVE'
+        session_to_start['started_at'] = datetime.now().isoformat()
+        
+        firebase.update('sessions', session_key, session_to_start)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Session started successfully',
+            'session': session_to_start
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@sessions_bp.route('/api/sessions/stop', methods=['POST'])
+def stop_session():
+    """Stop a session (can be called by ESP32)"""
+    try:
+        esp32_id = request.args.get('esp32_id')
+        if not esp32_id:
+            return jsonify({'success': False, 'error': 'esp32_id required'}), 400
+        
+        # Find room
+        room_id, room = get_room_by_esp32_id(esp32_id)
+        if not room_id:
+            return jsonify({'success': False, 'error': 'Room not found'}), 404
+        
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # Find active session for this room
+        all_sessions = firebase.get_all('sessions') or {}
+        active_session = None
+        session_key = None
+        
+        for key, session in all_sessions.items():
+            if (isinstance(session, dict) and
+                session.get('date') == today and
+                session.get('room') == room_id and
+                session.get('status') == 'ACTIVE'):
+                active_session = session
+                session_key = key
+                break
+        
+        if not active_session:
+            return jsonify({'success': False, 'error': 'No active session found'}), 404
+        
+        # Calculate attendance stats
+        stats = calculate_session_stats(today, room_id, active_session.get('group'))
         
         if not stats:
             return jsonify({'success': False, 'error': 'Error calculating statistics'}), 500
         
         # Close session
-        session_data['status'] = 'CLOSED'
-        session_data['closed_at'] = datetime.now().isoformat()
-        session_data['stats'] = stats
+        active_session['status'] = 'CLOSED'
+        active_session['closed_at'] = datetime.now().isoformat()
+        active_session['stats'] = stats
         
-        firebase.update('sessions', f'{today}/{room_id}', session_data)
+        firebase.update('sessions', session_key, active_session)
         
         return jsonify({
             'success': True,
             'message': 'Session stopped successfully',
-            'session_path': f'{today}/{room_id}',
             'stats': stats
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @sessions_bp.route('/api/sessions/generate', methods=['POST'])
-def generate_scheduled_sessions():
-    """Generate scheduled sessions for a date"""
+def generate_sessions():
+    """Manually generate sessions for a specific date"""
     try:
         date_str = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
-        day_of_week = get_day_of_week(date_str)
+        day_of_week = get_day_of_week(date_str).lower()
         
         schedule = firebase.get_all('schedule') or {}
-        sessions_created = []
+        sessions_created = 0
         
         for room_id, room_schedule in schedule.items():
             if day_of_week in room_schedule:
-                day_schedule = room_schedule[day_of_week]
+                day_sessions = room_schedule[day_of_week]
                 
-                # Get room info
-                room = firebase.get_one('rooms', room_id)
-                
-                for time_slot, slot_data in day_schedule.items():
-                    if isinstance(slot_data, dict):
-                        start_time, end_time = time_slot.split('-')
-                        
-                        session_data = {
-                            'date': date_str,
-                            'room': room_id,
-                            'room_name': room.get('name') if room else room_id,
-                            'start': start_time,
-                            'end': end_time,
-                            'group': slot_data['group'],
-                            'subject': slot_data['subject'],
-                            'status': 'SCHEDULED',
-                            'created_at': datetime.now().isoformat()
-                        }
-                        
-                        firebase.update('sessions', f'{date_str}/{room_id}', session_data)
-                        sessions_created.append(f'{date_str}/{room_id}')
+                if isinstance(day_sessions, list):
+                    for session_data in day_sessions:
+                        if isinstance(session_data, dict):
+                            # Create session key
+                            session_key = f"{date_str}/{room_id}/{session_data.get('start')}_{session_data.get('end')}"
+                            
+                            # Check if already exists
+                            existing_session = firebase.get_one('sessions', session_key)
+                            if existing_session:
+                                continue
+                            
+                            # Create session
+                            session_entry = {
+                                'date': date_str,
+                                'room': room_id,
+                                'start': session_data.get('start'),
+                                'end': session_data.get('end'),
+                                'group': session_data.get('group'),
+                                'subject': session_data.get('subject'),
+                                'status': 'SCHEDULED',
+                                'created_at': datetime.now().isoformat()
+                            }
+                            
+                            firebase.create('sessions', session_entry, session_key)
+                            sessions_created += 1
         
         return jsonify({
             'success': True,
-            'message': f'{len(sessions_created)} scheduled sessions created',
+            'message': f'{sessions_created} sessions created',
             'date': date_str,
-            'day': day_of_week,
-            'sessions': sessions_created
+            'sessions_created': sessions_created
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@sessions_bp.route('/api/sessions/today', methods=['GET'])
-def get_today_sessions():
-    """Get today's sessions"""
+@sessions_bp.route('/api/scheduler/status', methods=['GET'])
+def get_scheduler_status():
+    """Check scheduler status"""
     try:
-        today = datetime.now().strftime('%Y-%m-%d')
-        today_sessions = firebase.get_all(f'sessions/{today}') or {}
-        
-        enhanced_sessions = []
-        for room_id, session_data in today_sessions.items():
-            # Get additional info
-            room_data = firebase.get_one('rooms', room_id) or {}
-            group_data = firebase.get_one('groups', session_data.get('group')) or {}
-            subject_data = firebase.get_one('subjects', session_data.get('subject')) or {}
+        global scheduler
+        if scheduler:
+            jobs = []
+            for job in scheduler.get_jobs():
+                jobs.append({
+                    'id': job.id,
+                    'name': job.name,
+                    'next_run': job.next_run_time.isoformat() if job.next_run_time else None
+                })
             
-            enhanced_sessions.append({
-                'date': today,
-                'room': room_id,
-                **session_data,
-                'room_name': room_data.get('name', room_id),
-                'group_name': group_data.get('name', session_data.get('group')),
-                'subject_name': subject_data.get('name', session_data.get('subject')),
-                'teacher': subject_data.get('teacher', '')
+            return jsonify({
+                'success': True,
+                'running': scheduler.running,
+                'jobs': jobs,
+                'jobs_count': len(jobs)
             })
-        
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Scheduler not initialized'
+            })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@sessions_bp.route('/api/scheduler/trigger-now', methods=['POST'])
+def trigger_now():
+    """Manually trigger session generation now"""
+    try:
+        generate_daily_sessions_job()
         return jsonify({
             'success': True,
-            'data': enhanced_sessions,
-            'count': len(enhanced_sessions)
+            'message': 'Session generation triggered manually'
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@sessions_bp.route('/api/sessions/<date>/<room_id>/close', methods=['POST'])
-def close_session_manual(date, room_id):
-    """Manually close session and calculate absences"""
+@sessions_bp.route('/api/scheduler/test', methods=['GET'])
+def test_scheduler():
+    """Test if scheduler is working"""
     try:
-        session_data = firebase.get_all(f'sessions/{date}/{room_id}')
-        
-        if not session_data:
-            return jsonify({'success': False, 'error': 'Session not found'}), 404
-        
-        if session_data.get('status') == 'CLOSED':
-            return jsonify({'success': False, 'error': 'Session already closed'}), 400
-        
-        # Calculate statistics and mark absences
-        stats = calculate_session_stats(date, room_id, session_data.get('group'))
-        
-        if not stats:
-            return jsonify({'success': False, 'error': 'Error calculating statistics'}), 500
-        
-        # Close session
-        session_data['status'] = 'CLOSED'
-        session_data['closed_at'] = datetime.now().isoformat()
-        session_data['stats'] = stats
-        
-        firebase.update('sessions', f'{date}/{room_id}', session_data)
-        
+        global scheduler
         return jsonify({
             'success': True,
-            'message': 'Session closed',
-            'stats': stats
+            'scheduler_exists': scheduler is not None,
+            'scheduler_running': scheduler.running if scheduler else False,
+            'jobs': [job.name for job in scheduler.get_jobs()] if scheduler else []
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

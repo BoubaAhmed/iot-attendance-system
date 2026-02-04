@@ -2,33 +2,85 @@
 from datetime import datetime, timedelta
 from firebase_config import firebase
 
-def get_day_of_week(date_str=None):
-    """Convert date to weekday (in English)"""
-    if date_str:
-        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-    else:
-        date_obj = datetime.now()
-    
-    days_fr_to_en = {
-        'lundi': 'monday',
-        'mardi': 'tuesday',
-        'mercredi': 'wednesday',
-        'jeudi': 'thursday',
-        'vendredi': 'friday',
-        'samedi': 'saturday',
-        'dimanche': 'sunday'
-    }
-    
-    day_fr = date_obj.strftime('%A').lower()
-    return days_fr_to_en.get(day_fr, day_fr)
+# utils.py (add these functions if not present)
+
+def get_day_of_week(date_str):
+    """Get day of week from date string"""
+    from datetime import datetime
+    date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+    days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+    return days[date_obj.weekday()]
 
 def get_room_by_esp32_id(esp32_id):
-    """Find room by ESP32 ID"""
+    """Get room by ESP32 ID"""
     rooms = firebase.get_all('rooms') or {}
     for room_id, room_data in rooms.items():
-        if room_data.get('esp32_id') == esp32_id:
+        if isinstance(room_data, dict) and room_data.get('esp32_id') == esp32_id:
             return room_id, room_data
     return None, None
+
+def check_for_scheduled_session(esp32_id):
+    """Check if there's a scheduled session for ESP32"""
+    room_id, room = get_room_by_esp32_id(esp32_id)
+    if not room_id:
+        return None, "Room not found for ESP32"
+    
+    today = datetime.now().strftime('%Y-%m-%d')
+    current_time = datetime.now().strftime('%H:%M')
+    
+    # Get all sessions for today
+    sessions = firebase.get_all('sessions') or {}
+    
+    for session_key, session in sessions.items():
+        if (isinstance(session, dict) and
+            session.get('date') == today and
+            session.get('room') == room_id and
+            session.get('status') in ['SCHEDULED', 'ACTIVE']):
+            
+            session_start = session.get('start')
+            session_end = session.get('end')
+            
+            if session_start <= current_time <= session_end:
+                return session_key, session
+    
+    return None, "No scheduled session found"
+
+def calculate_session_stats(date, room_id, group_id):
+    """Calculate attendance statistics for a session"""
+    try:
+        # Get attendance for this group and date
+        attendance = firebase.get_one('attendance', f'{group_id}/{date}') or {}
+        
+        present_count = len(attendance.get('present', {}))
+        absent_count = len(attendance.get('absent', {}))
+        total_students = present_count + absent_count
+        
+        # Get group info for total expected students
+        group = firebase.get_one('groups', group_id) or {}
+        group_name = group.get('name', group_id)
+        
+        # Count students in group
+        all_students = firebase.get_all('students') or {}
+        students_in_group = sum(1 for student in all_students.values() 
+                               if isinstance(student, dict) and student.get('group') == group_id)
+        
+        stats = {
+            'date': date,
+            'room': room_id,
+            'group': group_id,
+            'group_name': group_name,
+            'present': present_count,
+            'absent': absent_count,
+            'attendance_rate': round((present_count / total_students * 100), 2) if total_students > 0 else 0,
+            'total_recorded': total_students,
+            'total_expected': students_in_group,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        return stats
+    except Exception as e:
+        print(f"Error calculating stats: {e}")
+        return None
 
 def get_active_session_for_room(room_id):
     """Find active session for a room"""
@@ -64,172 +116,14 @@ def get_today_schedule_for_room(room_id):
 
 # utils.py - Update the get_student_by_fingerprint function
 def get_student_by_fingerprint(fingerprint_id):
-    """Find student by fingerprint ID"""
-    try:
-        students = firebase.get_all('students') or []
-        for student in students:
-            if isinstance(student, dict) and student.get('fingerprint_id') == fingerprint_id:
-                return student
-        return None
-    except Exception as e:
-        print(f"Error in get_student_by_fingerprint: {e}")
-        return None
+    students = firebase.get_all('students') or []
+    fingerprint_id = int(fingerprint_id)
 
-def check_for_scheduled_session(esp32_id):
-    """Check if there's a scheduled session for ESP32"""
-    try:
-        room_id, room = get_room_by_esp32_id(esp32_id)
-        if not room or not room.get('active', True):
-            return None, "Room not found or inactive"
-        
-        today = datetime.now().strftime('%Y-%m-%d')
-        current_time = datetime.now().strftime('%H:%M')
-        
-        # Get today's schedule
-        today_schedule = get_today_schedule_for_room(room_id)
-        
-        if not today_schedule:
-            return None, "No classes scheduled for today"
-        
-        # Find current time slot
-        for time_slot, slot_data in today_schedule.items():
-            if isinstance(slot_data, dict):
-                start_time, end_time = time_slot.split('-')
-                
-                # If we're in the time slot
-                if start_time <= current_time <= end_time:
-                    # Check if session already exists
-                    session_data = firebase.get_all(f'sessions/{today}/{room_id}')
-                    
-                    if not session_data:
-                        # Create scheduled session
-                        session_data = {
-                            'date': today,
-                            'room': room_id,
-                            'room_name': room.get('name'),
-                            'start': start_time,
-                            'end': end_time,
-                            'group': slot_data.get('group'),
-                            'subject': slot_data.get('subject'),
-                            'status': 'SCHEDULED',
-                            'created_at': datetime.now().isoformat()
-                        }
-                        firebase.update('sessions', f'{today}/{room_id}', session_data)
-                        return f'{today}/{room_id}', session_data
-                    else:
-                        return f'{today}/{room_id}', session_data
-        
-        # Check slots in next 15 minutes
-        for time_slot, slot_data in today_schedule.items():
-            if isinstance(slot_data, dict):
-                start_time, end_time = time_slot.split('-')
-                start_datetime = datetime.strptime(f"{today} {start_time}", "%Y-%m-%d %H:%M")
-                time_diff = (start_datetime - datetime.now()).total_seconds() / 60
-                
-                if 0 < time_diff <= 15:  # In next 15 minutes
-                    session_data = firebase.get_all(f'sessions/{today}/{room_id}')
-                    
-                    if not session_data:
-                        session_data = {
-                            'date': today,
-                            'room': room_id,
-                            'room_name': room.get('name'),
-                            'start': start_time,
-                            'end': end_time,
-                            'group': slot_data.get('group'),
-                            'subject': slot_data.get('subject'),
-                            'status': 'SCHEDULED',
-                            'created_at': datetime.now().isoformat()
-                        }
-                        firebase.update('sessions', f'{today}/{room_id}', session_data)
-                        return f'{today}/{room_id}', session_data
-                    else:
-                        return f'{today}/{room_id}', session_data
-        
-        return None, "No class at this moment or in next 15 minutes"
-        
-    except Exception as e:
-        print(f"Error in check_for_scheduled_session: {e}")
-        return None, str(e)
+    for index, student in enumerate(students):
+        if student.get('fingerprint_id') == fingerprint_id:
+            return index, student
 
-def calculate_session_stats(date, room_id, group_id):
-    """Calculate session statistics and mark absences"""
-    try:
-        # Get all students
-        all_students = firebase.get_all('students') or []
-        students_in_group = []
-        
-        for student in all_students:
-            if isinstance(student, dict) and student.get('group') == group_id:
-                students_in_group.append(student)
-        
-        # Get attendance for this date and group
-        attendance_path = f'attendance/{date}/{group_id}'
-        group_attendance = firebase.get_all(attendance_path) or []
-        
-        present_count = 0
-        absent_count = 0
-        attendance_list = []
-        
-        # Check each student in group
-        for student in students_in_group:
-            student_found = False
-            
-            for attendance_record in group_attendance:
-                if isinstance(attendance_record, dict) and attendance_record.get('student_id') == str(student.get('fingerprint_id')):
-                    student_found = True
-                    if attendance_record.get('status') == 'PRESENT':
-                        present_count += 1
-                        attendance_list.append({
-                            'student_id': student.get('fingerprint_id'),
-                            'name': student.get('name'),
-                            'status': 'PRESENT',
-                            'created_at': attendance_record.get('created_at'),
-                            'method': 'FINGERPRINT'
-                        })
-                    break
-            
-            if not student_found:
-                absent_count += 1
-                attendance_list.append({
-                    'student_id': student.get('fingerprint_id'),
-                    'name': student.get('name'),
-                    'status': 'ABSENT',
-                    'created_at': None,
-                    'method': None
-                })
-                
-                # Mark as absent
-                absent_data = {
-                    'status': 'ABSENT',
-                    'student_id': str(student.get('fingerprint_id')),
-                    'created_at': datetime.now().isoformat()
-                }
-                # Add to attendance array
-                new_attendance = group_attendance + [absent_data]
-                firebase.update('attendance', f'{date}/{group_id}', new_attendance)
-        
-        total = present_count + absent_count
-        
-        # Update session stats
-        stats = {
-            'total': total,
-            'present': present_count,
-            'absent': absent_count,
-            'attendance_rate': round((present_count / total * 100), 2) if total > 0 else 0,
-            'attendance_list': attendance_list
-        }
-        
-        # Update session
-        session_data = firebase.get_all(f'sessions/{date}/{room_id}') or {}
-        if isinstance(session_data, dict):
-            session_data['stats'] = stats
-            firebase.update('sessions', f'{date}/{room_id}', session_data)
-        
-        return stats
-    except Exception as e:
-        print(f"Error in calculate_session_stats: {e}")
-        return None
+    return None, None
 
 def get_next_session_id():
     """Generate next student ID"""

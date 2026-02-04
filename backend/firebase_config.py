@@ -108,6 +108,11 @@ class FirebaseConfig:
                         return True
                 return False
             else:
+                # If data is a list, set the child directly (firebase update requires a dict)
+                if isinstance(data, list):
+                    ref.child(key).set(data)
+                    return True
+
                 # Update in dictionary
                 ref.child(key).update(data)
                 return True
