@@ -1,299 +1,179 @@
 {
   "attendance": {
-    "G1": {
-      "2025-12-26": {
-        "absent": {
-          "S3": {
-            "name": "Lkhalidi Mohamed"
-          }
+    "20260131_infoA_1600_G3": {
+      "present": {
+        "S5": {
+          "name": "Ibrahim Belkass",
+          "time": "16:05"
         },
-        "present": {
-          "S1": {
-            "name": "Ahmed Bouba",
-            "time": "08:12"
-          }
-        }
-      },
-      "2026-01-12": {
-        "present": {
-          "S1": {
-            "name": "Ahmed Bouba",
-            "time": "08:45"
-          },
-          "S3": {
-            "name": "Lkhalidi Mohamed",
-            "time": "09:05"
-          }
-        }
-      },
-      "2026-01-30": {
-        "present": {
-          "S1": {
-            "name": "Ahmed Bouba",
-            "time": "08:45"
-          },
-          "S3": {
-            "name": "Lkhalidi Mohamed",
-            "time": "09:05"
-          }
-        }
-      },
-      "2026-01-31": {
-        "present": {
-          "S1": {
-            "name": "Ahmed Bouba",
-            "time": "08:45"
-          },
-          "S3": {
-            "name": "Lkhalidi Mohamed",
-            "time": "09:05"
-          }
-        }
-      },
-      "2026-02-01": {
-        "present": {
-          "S1": {
-            "name": "Ahmed Bouba",
-            "time": "08:30"
-          },
-          "S3": {
-            "name": "Lkhalidi Mohamed",
-            "time": "09:00"
-          }
-        }
-      },
-      "2026-02-03": {
-        "present": {
-          "S1": {
-            "name": "Ahmed Bouba",
-            "time": "08:50"
-          },
-          "S3": {
-            "name": "Lkhalidi Mohamed",
-            "time": "09:10"
-          }
-        }
-      },
-      "2026-02-04": {
-        "present": {
-          "S1": {
-            "name": "Ahmed Bouba",
-            "time": "08:45"
-          },
-          "S3": {
-            "name": "Lkhalidi Mohamed",
-            "time": "09:05"
-          }
-        }
-      },
-      "2026-02-05": {
-        "absent": {
-          "S3": {
-            "name": "Lkhalidi Mohamed"
-          }
-        },
-        "present": {
-          "S1": {
-            "name": "Ahmed Bouba",
-            "time": "08:40"
-          }
+        "S6": {
+          "name": "Hamze Abde",
+          "time": "16:10"
         }
       }
     },
-    "G2": {
-      "2026-01-12": {
-        "present": {
-          "S2": {
-            "name": "Hicham Moussaid",
-            "time": "08:50"
-          },
-          "S4": {
-            "name": "Amine El Hanine",
-            "time": "09:10"
-          }
-        }
-      },
-      "2026-01-30": {
-        "absent": {
-          "S4": {
-            "name": "Amine El Hanine"
-          }
+    "20260131_roomA_1600_G1": {
+      "present": {
+        "S1": {
+          "name": "Ahmed Bouba",
+          "time": "16:05"
         },
-        "present": {
-          "S2": {
-            "name": "Hicham Moussaid",
-            "time": "08:50"
-          }
-        }
-      },
-      "2026-01-31": {
-        "absent": {
-          "S2": {
-            "name": "Hicham Moussaid"
-          },
-          "S4": {
-            "name": "Amine El Hanine"
-          }
-        }
-      },
-      "2026-02-01": {
-        "present": {
-          "S2": {
-            "name": "Hicham Moussaid",
-            "time": "08:45"
-          },
-          "S4": {
-            "name": "Amine El Hanine",
-            "time": "09:05"
-          }
-        }
-      },
-      "2026-02-03": {
-        "absent": {
-          "S4": {
-            "name": "Amine El Hanine",
-            "time": "09:15"
-          }
-        },
-        "present": {
-          "S2": {
-            "name": "Hicham Moussaid",
-            "time": "08:55"
-          }
-        }
-      },
-      "2026-02-04": {
-        "present": {
-          "S2": {
-            "name": "Hicham Moussaid",
-            "time": "08:45"
-          },
-          "S4": {
-            "name": "Amine El Hanine",
-            "time": "09:05"
-          }
-        }
-      },
-      "2026-02-05": {
-        "present": {
-          "S2": {
-            "name": "Hicham Moussaid",
-            "time": "08:40"
-          },
-          "S4": {
-            "name": "Amine El Hanine",
-            "time": "09:00"
-          }
-        }
-      },
-      "2026-12-26": {
-        "absent": {
-          "S4": {
-            "name": "Amine El Hanine"
-          }
-        },
-        "present": {
-          "S2": {
-            "name": "Hicham Moussaid",
-            "time": "08:50"
-          }
+        "S3": {
+          "name": "Lkhalidi Mohamed",
+          "time": "16:15"
         }
       }
     },
-    "G3": {
-      "2026-01-12": {
-        "present": {
-          "S5": {
-            "name": "Ibrahim Belkass",
-            "time": "08:50"
-          },
-          "S6": {
-            "name": "Hamze Abde",
-            "time": "09:10"
-          }
-        }
-      },
-      "2026-01-30": {
-        "absent": {
-          "S6": {
-            "name": "Hamze Abde"
-          }
+    "20260131_roomB_0800_G1": {
+      "present": {
+        "S1": {
+          "name": "Ahmed Bouba",
+          "time": "08:05"
         },
-        "present": {
-          "S5": {
-            "name": "Ibrahim Belkass",
-            "time": "08:50"
-          }
+        "S3": {
+          "name": "Lkhalidi Mohamed",
+          "time": "08:10"
         }
-      },
-      "2026-01-31": {
-        "absent": {
-          "S5": {
-            "name": "Ibrahim Belkass"
-          },
-          "S6": {
-            "name": "Hamze Abde"
-          }
-        }
-      },
-      "2026-02-01": {
-        "absent": {
-          "S5": {
-            "name": "Ibrahim Belkass"
-          },
-          "S6": {
-            "name": "Hamze Abde"
-          }
-        }
-      },
-      "2026-02-03": {
-        "absent": {
-          "S6": {
-            "name": "Hamze Abde",
-            "time": "08:55"
-          }
+      }
+    },
+    "20260131_roomB_1000_G3": {
+      "absent": {
+        "S5": {
+          "name": "Ibrahim Belkass"
         },
-        "present": {
-          "S5": {
-            "name": "Ibrahim Belkass",
-            "time": "09:00"
-          }
+        "S6": {
+          "name": "Hamze Abde"
+        }
+      }
+    },
+    "20260131_roomB_1600_G2": {
+      "absent": {
+        "S2": {
+          "name": "Hicham Moussaid"
+        },
+        "S4": {
+          "name": "Amine El Hanine"
+        }
+      }
+    },
+    "20260204_roomA_0800_G1": {
+      "present": {
+        "S1": {
+          "name": "Ahmed Bouba",
+          "time": "08:02"
+        },
+        "S3": {
+          "name": "Lkhalidi Mohamed",
+          "time": "08:05"
+        }
+      }
+    },
+    "20260204_roomA_1000_G1": {
+      "present": {
+        "S1": {
+          "name": "Ahmed Bouba",
+          "time": "10:05"
+        },
+        "S3": {
+          "name": "Lkhalidi Mohamed",
+          "time": "10:12"
+        }
+      }
+    },
+    "20260204_roomB_0800_G2": {
+      "present": {
+        "S2": {
+          "name": "Hicham Moussaid",
+          "time": "08:15"
+        },
+        "S4": {
+          "name": "Amine El Hanine",
+          "time": "08:20"
+        }
+      }
+    },
+    "20260204_roomB_1000_G1": {
+      "present": {
+        "S1": {
+          "name": "Ahmed Bouba",
+          "time": "10:05"
+        },
+        "S3": {
+          "name": "Lkhalidi Mohamed",
+          "time": "10:15"
+        }
+      }
+    },
+    "20260205_infoA_1400_G3": {
+      "present": {
+        "S5": {
+          "name": "Ibrahim Belkass",
+          "time": "14:10"
+        },
+        "S6": {
+          "name": "Hamze Abde",
+          "time": "14:05"
+        }
+      }
+    },
+    "20260205_roomA_0800_G1": {
+      "present": {
+        "S1": {
+          "name": "Ahmed Bouba",
+          "time": "08:10"
+        },
+        "S3": {
+          "name": "Lkhalidi Mohamed",
+          "time": "08:15"
+        }
+      }
+    },
+    "20260205_roomA_1000_G1": {
+      "absent": {
+        "S3": {
+          "name": "Lkhalidi Mohamed"
         }
       },
-      "2026-02-04": {
-        "present": {
-          "S5": {
-            "name": "Ibrahim Belkass",
-            "time": "09:05"
-          },
-          "S6": {
-            "name": "Hamze Abde",
-            "time": "08:45"
-          }
+      "present": {
+        "S1": {
+          "name": "Ahmed Bouba",
+          "time": "10:10"
         }
-      },
-      "2026-02-05": {
-        "present": {
-          "S5": {
-            "name": "Ibrahim Belkass",
-            "time": "09:00"
-          },
-          "S6": {
-            "name": "Hamze Abde",
-            "time": "08:40"
-          }
+      }
+    },
+    "20260205_roomB_0800_G2": {
+      "present": {
+        "S2": {
+          "name": "Hicham Moussaid",
+          "time": "08:05"
+        },
+        "S4": {
+          "name": "Amine El Hanine",
+          "time": "08:12"
         }
-      },
-      "2026-12-26": {
-        "present": {
-          "S5": {
-            "name": "Ibrahim Belkass",
-            "time": "08:55"
-          },
-          "S6": {
-            "name": "Hamze Abde",
-            "time": "08:50"
-          }
+      }
+    },
+    "20260205_roomB_1000_G2": {
+      "present": {
+        "S2": {
+          "name": "Hicham Moussaid",
+          "time": "10:05"
+        },
+        "S4": {
+          "name": "Amine El Hanine",
+          "time": "10:10"
+        }
+      }
+    },
+    "20260205_roomB_1600_G1": {
+      "present": {
+        "S1": {
+          "name": "Ahmed Bouba",
+          "time": "16:05"
+        },
+        "S3": {
+          "name": "Lkhalidi Mohamed",
+          "time": "16:08"
         }
       }
     }
@@ -326,6 +206,24 @@
     }
   },
   "rooms": {
+    "fablab": {
+      "active": false,
+      "capacity": "20",
+      "description": "",
+      "equipment": "Projecteur, Ordinateurs, Machines3D",
+      "esp32_id": "ESP32_D",
+      "location": "Bloc A",
+      "name": "FabLab"
+    },
+    "infoA": {
+      "active": true,
+      "capacity": "35",
+      "description": "",
+      "equipment": "Projecteur, Ordinateurs",
+      "esp32_id": "ESP32_C",
+      "location": "Bloc A",
+      "name": "Salle info 1"
+    },
     "roomA": {
       "active": true,
       "capacity": "30",
@@ -343,24 +241,45 @@
       "esp32_id": "ESP32_B",
       "location": "Bloc D",
       "name": "Salle IoT"
-    },
-    "salle_info_1": {
-      "active": true,
-      "capacity": "35",
-      "description": "",
-      "equipment": "Projecteur, Ordinateurs",
-      "esp32_id": "ESP32_C",
-      "location": "Bloc A",
-      "name": "Salle info 1"
     }
   },
   "schedule": {
+    "infoA": {
+      "saturday": [
+        {
+          "end": "10:00",
+          "group": "G2",
+          "start": "08:00",
+          "subject": "python"
+        },
+        {
+          "end": "18:00",
+          "group": "G3",
+          "start": "16:00",
+          "subject": "iot"
+        }
+      ],
+      "thursday": [
+        {
+          "end": "16:00",
+          "group": "G3",
+          "start": "14:00",
+          "subject": "robotics"
+        }
+      ]
+    },
     "roomA": {
       "friday": [
         {
           "end": "10:00",
           "group": "G1",
           "start": "08:00",
+          "subject": "iot"
+        },
+        {
+          "end": "12:00",
+          "group": "G2",
+          "start": "10:00",
           "subject": "iot"
         }
       ],
@@ -379,6 +298,12 @@
         }
       ],
       "saturday": [
+        {
+          "end": "10:00",
+          "group": "G3",
+          "start": "08:00",
+          "subject": "big_data"
+        },
         {
           "end": "18:00",
           "group": "G1",
@@ -416,6 +341,20 @@
       ]
     },
     "roomB": {
+      "friday": [
+        {
+          "end": "10:00",
+          "group": "G2",
+          "start": "08:00",
+          "subject": "robotics"
+        },
+        {
+          "end": "16:00",
+          "group": "G1",
+          "start": "14:00",
+          "subject": "robotics"
+        }
+      ],
       "monday": [
         {
           "end": "10:00",
@@ -484,36 +423,35 @@
           "subject": "robotics"
         }
       ]
-    },
-    "salle_info_1": {
-      "saturday": [
-        {
-          "end": "18:00",
-          "group": "G3",
-          "start": "16:00",
-          "subject": "iot"
-        }
-      ],
-      "thursday": [
-        {
-          "end": "16:00",
-          "group": "G3",
-          "start": "14:00",
-          "subject": "robotics"
-        }
-      ]
     }
   },
   "sessions": {
     "2026-01-31": {
+      "infoA": [
+        {
+          "auto_closed": false,
+          "auto_created": false,
+          "created_at": "2026-01-31T10:40:04.500883",
+          "end": "18:00",
+          "group": "G3",
+          "room": "infoA",
+          "room_name": "Salle info 1",
+          "session_id": "20260131_infoA_1600_G3",
+          "start": "16:00",
+          "status": "SCHEDULED",
+          "subject": "iot"
+        }
+      ],
       "roomA": [
         {
+          "auto_closed": false,
+          "auto_created": false,
           "created_at": "2026-01-31T10:40:03.152439",
-          "date": "2026-01-31",
           "end": "18:00",
           "group": "G1",
           "room": "roomA",
           "room_name": "Salle Robotics",
+          "session_id": "20260131_roomA_1600_G1",
           "start": "16:00",
           "status": "SCHEDULED",
           "subject": "iot"
@@ -521,50 +459,43 @@
       ],
       "roomB": [
         {
+          "auto_closed": false,
+          "auto_created": false,
           "created_at": "2026-01-31T10:40:03.495441",
-          "date": "2026-01-31",
           "end": "10:00",
           "group": "G1",
           "room": "roomB",
           "room_name": "Salle IoT",
+          "session_id": "20260131_roomB_0800_G1",
           "start": "08:00",
           "status": "SCHEDULED",
           "subject": "iot"
         },
         {
+          "auto_closed": false,
+          "auto_created": false,
           "created_at": "2026-01-31T10:40:03.826571",
-          "date": "2026-01-31",
           "end": "12:00",
           "group": "G3",
           "room": "roomB",
           "room_name": "Salle IoT",
+          "session_id": "20260131_roomB_1000_G3",
           "start": "10:00",
           "status": "SCHEDULED",
           "subject": "robotics"
         },
         {
+          "auto_closed": false,
+          "auto_created": false,
           "created_at": "2026-01-31T10:40:04.162194",
-          "date": "2026-01-31",
           "end": "18:00",
           "group": "G2",
           "room": "roomB",
           "room_name": "Salle IoT",
+          "session_id": "20260131_roomB_1600_G2",
           "start": "16:00",
           "status": "SCHEDULED",
           "subject": "robotics"
-        }
-      ],
-      "salle_info_1": [
-        {
-          "created_at": "2026-01-31T10:40:04.500883",
-          "date": "2026-01-31",
-          "end": "18:00",
-          "group": "G3",
-          "room": "salle_info_1",
-          "room_name": "Salle info 1",
-          "start": "16:00",
-          "status": "SCHEDULED",
-          "subject": "iot"
         }
       ]
     },
@@ -572,26 +503,28 @@
       "roomA": [
         {
           "auto_closed": true,
+          "auto_created": false,
           "closed_at": "2026-02-04T20:36:28.710921",
           "created_at": "2026-02-04T13:34:00.343758",
-          "date": "2026-02-04",
           "end": "10:00",
           "group": "G1",
           "room": "roomA",
           "room_name": "Salle Robotics",
+          "session_id": "20260204_roomA_0800_G1",
           "start": "08:00",
           "status": "CLOSED",
           "subject": "robotics"
         },
         {
           "auto_closed": true,
+          "auto_created": false,
           "closed_at": "2026-02-04T20:36:29.762660",
           "created_at": "2026-02-04T13:34:00.652759",
-          "date": "2026-02-04",
           "end": "12:00",
           "group": "G1",
           "room": "roomA",
           "room_name": "Salle Robotics",
+          "session_id": "20260204_roomA_1000_G1",
           "start": "10:00",
           "status": "CLOSED",
           "subject": "iot"
@@ -600,26 +533,28 @@
       "roomB": [
         {
           "auto_closed": true,
+          "auto_created": false,
           "closed_at": "2026-02-04T20:36:30.951069",
           "created_at": "2026-02-04T13:34:00.960758",
-          "date": "2026-02-04",
           "end": "10:00",
           "group": "G2",
           "room": "roomB",
           "room_name": "Salle IoT",
+          "session_id": "20260204_roomB_0800_G2",
           "start": "08:00",
           "status": "CLOSED",
           "subject": "robotics"
         },
         {
           "auto_closed": true,
+          "auto_created": false,
           "closed_at": "2026-02-04T20:36:32.021436",
           "created_at": "2026-02-04T13:34:01.281757",
-          "date": "2026-02-04",
           "end": "12:00",
           "group": "G1",
           "room": "roomB",
           "room_name": "Salle IoT",
+          "session_id": "20260204_roomB_1000_G1",
           "start": "10:00",
           "status": "CLOSED",
           "subject": "iot"
@@ -627,41 +562,50 @@
       ]
     },
     "2026-02-05": {
+      "infoA": [
+        {
+          "auto_closed": true,
+          "auto_created": true,
+          "closed_at": "2026-02-05T12:02:03.345123",
+          "created_at": "2026-02-05T10:20:04.089304",
+          "end": "16:00",
+          "group": "G3",
+          "room": "infoA",
+          "room_name": "Salle info 1",
+          "session_id": "20260205_infoA_1400_G3",
+          "start": "14:00",
+          "status": "ACTIVE",
+          "subject": "robotics"
+        }
+      ],
       "roomA": [
         {
           "auto_closed": true,
           "auto_created": true,
           "closed_at": "2026-02-05T12:02:02.055000",
           "created_at": "2026-02-05T10:20:00.234621",
-          "date": "2026-02-05",
           "end": "10:00",
           "group": "G1",
           "room": "roomA",
           "room_name": "Salle Robotics",
-          "session_id": "2026-02-05_roomA_0800_1000",
+          "session_id": "20260205_roomA_0800_G1",
           "start": "08:00",
-          "stats": {
-            "absent": 3,
-            "present": 0,
-            "total": 3
-          },
           "status": "CLOSED",
-          "subject": "big_data",
-          "subject_name": "Big Data"
+          "subject": "big_data"
         },
         {
+          "auto_closed": true,
           "auto_created": true,
+          "closed_at": "2026-02-05T12:02:02.789456",
           "created_at": "2026-02-05T10:20:00.996623",
-          "date": "2026-02-05",
           "end": "12:00",
           "group": "G1",
           "room": "roomA",
           "room_name": "Salle Robotics",
-          "session_id": "2026-02-05_roomA_1000_1200",
+          "session_id": "20260205_roomA_1000_G1",
           "start": "10:00",
-          "status": "SCHEDULED",
-          "subject": "iot",
-          "subject_name": "Internet of Things"
+          "status": "CLOSED",
+          "subject": "iot"
         }
       ],
       "roomB": [
@@ -670,65 +614,41 @@
           "auto_created": true,
           "closed_at": "2026-02-05T12:02:02.592389",
           "created_at": "2026-02-05T10:20:01.777671",
-          "date": "2026-02-05",
           "end": "10:00",
           "group": "G2",
           "room": "roomB",
           "room_name": "Salle IoT",
-          "session_id": "2026-02-05_roomB_0800_1000",
+          "session_id": "20260205_roomB_0800_G2",
           "start": "08:00",
-          "stats": {
-            "absent": 2,
-            "present": 0,
-            "total": 2
-          },
           "status": "CLOSED",
-          "subject": "python",
-          "subject_name": "Python"
+          "subject": "python"
         },
         {
+          "auto_closed": true,
           "auto_created": true,
+          "closed_at": "2026-02-05T12:02:02.789456",
           "created_at": "2026-02-05T10:20:02.550593",
-          "date": "2026-02-05",
           "end": "12:00",
           "group": "G2",
           "room": "roomB",
           "room_name": "Salle IoT",
-          "session_id": "2026-02-05_roomB_1000_1200",
+          "session_id": "20260205_roomB_1000_G2",
           "start": "10:00",
-          "status": "SCHEDULED",
-          "subject": "big_data",
-          "subject_name": "Big Data"
+          "status": "CLOSED",
+          "subject": "big_data"
         },
         {
+          "auto_closed": false,
           "auto_created": true,
           "created_at": "2026-02-05T10:20:03.322402",
-          "date": "2026-02-05",
           "end": "18:00",
           "group": "G1",
           "room": "roomB",
           "room_name": "Salle IoT",
-          "session_id": "2026-02-05_roomB_1600_1800",
+          "session_id": "20260205_roomB_1600_G1",
           "start": "16:00",
           "status": "SCHEDULED",
-          "subject": "robotics",
-          "subject_name": "Robotics"
-        }
-      ],
-      "salle_info_1": [
-        {
-          "auto_created": true,
-          "created_at": "2026-02-05T10:20:04.089304",
-          "date": "2026-02-05",
-          "end": "16:00",
-          "group": "G3",
-          "room": "salle_info_1",
-          "room_name": "Salle info 1",
-          "session_id": "2026-02-05_salle_info_1_1400_1600",
-          "start": "14:00",
-          "status": "SCHEDULED",
-          "subject": "robotics",
-          "subject_name": "Robotics"
+          "subject": "robotics"
         }
       ]
     }
@@ -799,7 +719,7 @@
       "level": "Master 1",
       "name": "Big Data",
       "semester": "S2",
-      "teacher_id": "T2"
+      "teacher_id": "T1"
     },
     "iot": {
       "credits": 3,
@@ -814,14 +734,46 @@
       "level": "Licence 1",
       "name": "Python",
       "semester": "S1",
-      "teacher_id": "T1"
+      "teacher_id": "T3"
     },
     "robotics": {
       "credits": 3,
       "level": "Licence 3",
       "name": "Robotics",
       "semester": "S1",
-      "teacher_id": "T1"
+      "teacher_id": "T4"
+    },
+    "web_dev": {
+      "credits": 4,
+      "description": "",
+      "level": "Licence 2",
+      "name": "Web Development",
+      "semester": "S2",
+      "teacher_id": "T5"
+    },
+    "data_science": {
+      "credits": 4,
+      "description": "",
+      "level": "Master 2",
+      "name": "Data Science",
+      "semester": "S1",
+      "teacher_id": "T4"
+    },
+    "cyber_security": {
+      "credits": 3,
+      "description": "",
+      "level": "Master 1",
+      "name": "Cyber Security",
+      "semester": "S2",
+      "teacher_id": "T3"
+    },
+    "machine_learning": {
+      "credits": 4,
+      "description": "",
+      "level": "Master 2",
+      "name": "Machine Learning",
+      "semester": "S2",
+      "teacher_id": "T2"
     }
   },
   "teachers": {
@@ -830,6 +782,15 @@
     },
     "T2": {
       "name": "Dr. Y"
+    },
+    "T3": {
+      "name": "Dr. Z"
+    },
+    "T4": {
+      "name": "Dr. W"
+    },
+    "T5": {
+      "name": "Dr. V"
     }
   }
 }
