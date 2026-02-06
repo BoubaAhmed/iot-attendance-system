@@ -19,7 +19,7 @@ Adafruit_Fingerprint finger(&mySerial);
 #define WIFI_SSID "Readme 9T"
 #define WIFI_PASSWORD "123456789"
 #define FIREBASE_HOST "iot-attendance-systeme-default-rtdb.europe-west1.firebasedatabase.app"
-#define FIREBASE_AUTH "AIzaSyCiQkuIHnCFbAxfhxMpdVfk0PymoYkY66g" // Clé API Firebase
+#define FIREBASE_AUTH "key" // Clé API Firebase
 
 // ---------- ESP32 ID (À MODIFIER SELON VOTRE ESP32) ----------
 #define ESP32_ID "ESP32_A"  // Changez en "ESP32_B" pour l'autre salle
@@ -36,7 +36,7 @@ const int daylightOffset_sec = 3600;
 
 // ---------- VARIABLES GLOBALES ----------
 String currentRoom = "";
-String currentSessionPath = ""; // Format: "2026-01-31/roomA/16:00_18:00"
+String currentSessionId = ""; // Format: "20260206_roomA_0800_G1"
 String currentGroup = "";
 String currentSubject = "";
 String currentSubjectName = "";
@@ -78,7 +78,7 @@ void showLCD(String line1, String line2 = "", int delayMs = 0) {
 String getCurrentDate() {
     struct tm timeinfo;
     if (!getLocalTime(&timeinfo)) {
-        return "2026-02-05"; // Date par défaut en cas d'erreur
+        return "2026-02-06"; // Date par défaut en cas d'erreur
     }
     char dateStr[11];
     strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", &timeinfo);
@@ -93,16 +93,6 @@ String getCurrentTime() {
     char timeStr[6];
     strftime(timeStr, sizeof(timeStr), "%H:%M", &timeinfo);
     return String(timeStr);
-}
-
-String getCurrentDay() {
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo)) {
-        return "monday";
-    }
-    
-    const char* days[] = {"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"};
-    return String(days[timeinfo.tm_wday]);
 }
 
 // Convertir temps en minutes pour comparaison
@@ -200,75 +190,94 @@ bool checkActiveSession() {
         return false;
     }
     
-    FirebaseJson &json = fbData.jsonObject();
-    size_t len = json.iteratorBegin();
-    String key, value;
-    int type = 0;
+    // Les sessions sont stockées dans un tableau JSON
+    FirebaseJsonArray &sessionsArray = fbData.jsonArray();
+    size_t arrayLen = sessionsArray.size();
     
-    bool foundSession = false;
+    Serial.print("Nombre de sessions trouvées: ");
+    Serial.println(arrayLen);
     
-    for (size_t i = 0; i < len; i++) {
-        json.iteratorGet(i, type, key, value);
+    bool foundActiveSession = false;
+    
+    for (size_t i = 0; i < arrayLen; i++) {
+        FirebaseJsonData sessionData;
+        sessionsArray.get(sessionData, i);
         
-        // key format: "16:00_18:00"
-        int separatorPos = key.indexOf('_');
-        if (separatorPos == -1) continue;
-        
-        String startTime = key.substring(0, separatorPos);
-        String endTime = key.substring(separatorPos + 1);
-        
-        int startMinutes = timeToMinutes(startTime);
-        int endMinutes = timeToMinutes(endTime);
-        
-        // Vérifier si nous sommes dans ce créneau horaire
-        if (currentMinutes >= startMinutes && currentMinutes < endMinutes) {
-            Serial.print("Session trouvée: ");
-            Serial.println(key);
+        if (sessionData.typeNum == FirebaseJson::JSON_OBJECT) {
+            FirebaseJson &sessionJson = sessionData.jsonObject;
             
-            // Construire le chemin complet de la session
-            currentSessionPath = today + "/" + currentRoom + "/" + key;
+            String sessionId, status, startTime, endTime, group, subject;
+            int startMinutes, endMinutes;
             
-            // Récupérer les détails de la session
-            String sessionPath = roomSessionsPath + "/" + key;
-            
-            if (Firebase.getJSON(fbData, sessionPath)) {
-                FirebaseJson &sessionJson = fbData.jsonObject();
+            // Récupérer les données de la session
+            if (sessionJson.get("session_id", sessionId) &&
+                sessionJson.get("status", status) &&
+                sessionJson.get("start", startTime) &&
+                sessionJson.get("end", endTime) &&
+                sessionJson.get("group", group) &&
+                sessionJson.get("subject", subject)) {
                 
-                // Récupérer les informations de la session
-                String status = "";
-                if (sessionJson.get("status", status)) {
-                    // Si la session est SCHEDULED, la passer en ACTIVE
-                    if (status == "SCHEDULED") {
+                startMinutes = timeToMinutes(startTime);
+                endMinutes = timeToMinutes(endTime);
+                
+                Serial.print("Session: ");
+                Serial.print(sessionId);
+                Serial.print(" | Statut: ");
+                Serial.print(status);
+                Serial.print(" | De ");
+                Serial.print(startTime);
+                Serial.print(" à ");
+                Serial.println(endTime);
+                
+                // Vérifier si la session est active (ACTIVE) ou planifiée (SCHEDULED)
+                // et si l'heure actuelle est dans la plage horaire
+                if ((status == "ACTIVE" || status == "SCHEDULED") &&
+                    currentMinutes >= (startMinutes - 5) && // 5 minutes avant le début
+                    currentMinutes <= (endMinutes + 5)) {   // 5 minutes après la fin
+                    
+                    // Si c'est une session planifiée et qu'on est dans les 5 minutes avant/après,
+                    // on peut la marquer comme ACTIVE
+                    if (status == "SCHEDULED" && currentMinutes >= startMinutes) {
+                        // Mettre à jour le statut de la session
                         sessionJson.set("status", "ACTIVE");
                         sessionJson.set("started_at", getCurrentTime());
-                        Firebase.setJSON(fbData, sessionPath, sessionJson);
-                        Serial.println("Session passée en ACTIVE");
-                        beep(200);
+                        
+                        // Enregistrer la mise à jour dans Firebase
+                        String updatePath = roomSessionsPath + "/" + i;
+                        Firebase.setJSON(fbData, updatePath, sessionJson);
+                        Serial.println("Session marquée comme ACTIVE");
                     }
                     
-                    // Récupérer les autres informations
-                    sessionJson.get("group", currentGroup);
-                    sessionJson.get("subject", currentSubject);
+                    // Si la session est CLOSED, on ne fait rien
+                    if (status == "CLOSED") {
+                        continue;
+                    }
                     
                     // Récupérer le nom de la matière
-                    currentSubjectName = currentSubject;
-                    if (Firebase.getString(fbData, "/subjects/" + currentSubject + "/name")) {
-                        currentSubjectName = fbData.stringData();
+                    String subjectName = subject;
+                    if (Firebase.getString(fbData, "/subjects/" + subject + "/name")) {
+                        subjectName = fbData.stringData();
                     }
                     
+                    // Définir les variables globales
+                    currentSessionId = sessionId;
+                    currentGroup = group;
+                    currentSubject = subject;
+                    currentSubjectName = subjectName;
                     sessionActive = true;
-                    foundSession = true;
+                    foundActiveSession = true;
                     
-                    Serial.print("Session ID: ");
-                    Serial.println(currentSessionPath);
+                    Serial.print("Session active détectée: ");
+                    Serial.println(sessionId);
                     Serial.print("Groupe: ");
                     Serial.println(currentGroup);
                     Serial.print("Matière: ");
                     Serial.println(currentSubjectName);
-                    Serial.print("Statut: ");
-                    Serial.println(status);
                     
-                    // Afficher la matière sur LCD
+                    // Charger les étudiants du groupe actuel
+                    loadGroupStudents();
+                    
+                    // Afficher sur LCD
                     showLCD("Session active", currentSubjectName, 2000);
                     break;
                 }
@@ -276,57 +285,17 @@ bool checkActiveSession() {
         }
     }
     
-    json.iteratorEnd();
-    
-    if (!foundSession) {
+    if (!foundActiveSession) {
         Serial.println("Pas de session active en ce moment");
         sessionActive = false;
-        
-        // Vérifier s'il y aura une session plus tard aujourd'hui
-        bool hasFutureSession = false;
-        if (Firebase.getJSON(fbData, roomSessionsPath)) {
-            FirebaseJson &futureJson = fbData.jsonObject();
-            size_t futureLen = futureJson.iteratorBegin();
-            
-            for (size_t i = 0; i < futureLen; i++) {
-                futureJson.iteratorGet(i, type, key, value);
-                int separatorPos = key.indexOf('_');
-                if (separatorPos == -1) continue;
-                
-                String startTime = key.substring(0, separatorPos);
-                int startMinutes = timeToMinutes(startTime);
-                
-                if (currentMinutes < startMinutes) {
-                    hasFutureSession = true;
-                    
-                    // Récupérer les détails de la prochaine session
-                    String nextSessionPath = roomSessionsPath + "/" + key;
-                    if (Firebase.getJSON(fbData, nextSessionPath)) {
-                        FirebaseJson &nextSession = fbData.jsonObject();
-                        String nextSubject = "";
-                        nextSession.get("subject", nextSubject);
-                        
-                        // Récupérer le nom de la matière
-                        String nextSubjectName = nextSubject;
-                        if (Firebase.getString(fbData, "/subjects/" + nextSubject + "/name")) {
-                            nextSubjectName = fbData.stringData();
-                        }
-                        
-                        showLCD("Prochaine:", nextSubjectName, 2000);
-                        showLCD("A " + startTime, "Groupe " + currentGroup, 2000);
-                    }
-                    break;
-                }
-            }
-            futureJson.iteratorEnd();
-        }
-        
-        if (!hasFutureSession) {
-            showLCD("Pas de session", "aujourd'hui", 2000);
-        }
+        currentSessionId = "";
+        currentGroup = "";
+        currentSubject = "";
+        currentSubjectName = "";
+        showLCD("Pas de session", "active", 2000);
     }
     
-    return foundSession;
+    return foundActiveSession;
 }
 
 // ---------- CHARGER LES ÉTUDIANTS ----------
@@ -405,8 +374,71 @@ void loadGroupStudents() {
     Serial.print(currentGroup);
     Serial.println(" ===");
     
-    // Cette fonction peut être utilisée pour optimiser la vérification
-    // Pour l'instant, nous utilisons la liste complète des étudiants
+    studentCount = 0;
+    
+    if (!Firebase.getJSON(fbData, "/students")) {
+        Serial.println("Erreur chargement étudiants");
+        return;
+    }
+    
+    FirebaseJson &json = fbData.jsonObject();
+    size_t len = json.iteratorBegin();
+    String key, value;
+    int type = 0;
+    
+    for (size_t i = 0; i < len; i++) {
+        json.iteratorGet(i, type, key, value);
+        
+        String studentPath = "/students/" + key;
+        
+        // Vérifier si l'étudiant est actif
+        bool isActive = false;
+        if (Firebase.getBool(fbData, studentPath + "/active")) {
+            isActive = fbData.boolData();
+        }
+        
+        if (!isActive) continue;
+        
+        // Vérifier le groupe de l'étudiant
+        String studentGroup = "";
+        if (Firebase.getString(fbData, studentPath + "/group")) {
+            studentGroup = fbData.stringData();
+        }
+        
+        // Ne charger que les étudiants du groupe actuel
+        if (studentGroup != currentGroup) continue;
+        
+        students[studentCount].id = key;
+        students[studentCount].active = isActive;
+        
+        if (Firebase.getString(fbData, studentPath + "/name")) {
+            students[studentCount].name = fbData.stringData();
+        }
+        
+        if (Firebase.getInt(fbData, studentPath + "/fingerprint_id")) {
+            students[studentCount].fingerprintId = fbData.intData();
+        }
+        
+        students[studentCount].group = studentGroup;
+        
+        Serial.print("Étudiant groupe ");
+        Serial.print(studentCount);
+        Serial.print(": ");
+        Serial.print(students[studentCount].name);
+        Serial.print(" | ID: ");
+        Serial.print(students[studentCount].id);
+        Serial.print(" | Empreinte: ");
+        Serial.println(students[studentCount].fingerprintId);
+        
+        studentCount++;
+        
+        if (studentCount >= 50) break;
+    }
+    
+    json.iteratorEnd();
+    
+    Serial.print("Étudiants du groupe chargés: ");
+    Serial.println(studentCount);
 }
 
 // ---------- TROUVER ÉTUDIANT PAR EMPREINTE ----------
@@ -419,21 +451,9 @@ Student* findStudentByFingerprint(int fingerprintId) {
     return nullptr;
 }
 
-// ---------- VÉRIFIER SI ÉTUDIANT EST DANS LE GROUPE ----------
-bool isStudentInGroup(String studentId, String group) {
-    // Cette fonction vérifie si l'étudiant appartient au groupe
-    // Dans votre structure, le groupe est stocké dans l'étudiant
-    for (int i = 0; i < studentCount; i++) {
-        if (students[i].id == studentId && students[i].group == group) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // ---------- ENREGISTRER PRÉSENCE ----------
 void recordAttendance(Student* student) {
-    if (!sessionActive || currentSessionPath == "" || currentGroup == "") {
+    if (!sessionActive || currentSessionId == "" || currentGroup == "") {
         Serial.println("Aucune session active");
         showLCD("Erreur:", "Pas de session", 2000);
         beep(100);
@@ -454,103 +474,95 @@ void recordAttendance(Student* student) {
         return;
     }
     
-    String today = getCurrentDate();
     String currentTime = getCurrentTime();
     
-    // 1. Vérifier si déjà présent dans la session (nouvelle structure)
-    String sessionAttendancePath = "/sessions/" + currentSessionPath + "/attendance/" + student->id;
-    if (Firebase.getString(fbData, sessionAttendancePath + "/status")) {
-        String status = fbData.stringData();
-        if (status == "PRESENT") {
-            Serial.println("Déjà présent dans cette session!");
-            showLCD("Deja present!", student->name, 2000);
-            beep(100);
-            delay(100);
-            beep(100);
-            return;
-        }
-    }
+    // Vérifier si l'étudiant est déjà présent
+    String attendancePath = "/attendance/" + currentSessionId + "/present/" + student->id;
     
-    // 2. Vérifier si déjà présent dans l'ancienne structure
-    String oldAttendancePath = "/attendance/" + currentGroup + "/" + today + "/present/" + student->id;
-    if (Firebase.getString(fbData, oldAttendancePath + "/time")) {
-        Serial.println("Déjà présent (ancienne structure)!");
-        // On continue quand même pour mettre à jour la nouvelle structure
-    }
-    
-    // 3. Enregistrer dans la NOUVELLE structure (sessions)
-    FirebaseJson sessionJson;
-    sessionJson.set("status", "PRESENT");
-    sessionJson.set("time", currentTime);
-    sessionJson.set("name", student->name);
-    sessionJson.set("student_id", student->id);
-    sessionJson.set("fingerprint_id", student->fingerprintId);
-    
-    if (Firebase.setJSON(fbData, sessionAttendancePath, sessionJson)) {
-        Serial.println("Présence enregistrée dans la session!");
-    } else {
-        Serial.println("Erreur enregistrement dans session");
-        showLCD("Erreur Firebase", "", 2000);
+    if (Firebase.getString(fbData, attendancePath + "/time")) {
+        String existingTime = fbData.stringData();
+        Serial.println("Étudiant déjà présent!");
+        showLCD("Deja present", student->name, 2000);
+        beep(100);
+        delay(100);
+        beep(100);
         return;
     }
     
-    // 4. Enregistrer dans l'ANCIENNE structure pour compatibilité
-    FirebaseJson oldJson;
-    oldJson.set("name", student->name);
-    oldJson.set("time", currentTime);
+    // Enregistrer la présence dans le format spécifié
+    FirebaseJson presentJson;
+    presentJson.set("name", student->name);
+    presentJson.set("time", currentTime);
     
-    if (Firebase.setJSON(fbData, oldAttendancePath, oldJson)) {
-        Serial.println("Présence enregistrée dans l'ancienne structure!");
+    if (Firebase.setJSON(fbData, attendancePath, presentJson)) {
+        Serial.println("Présence enregistrée!");
+        
+        // Mettre à jour le statut de la session si nécessaire
+        updateSessionStatus();
+        
+        beep(300);
+        showLCD("Presence OK", student->name, 2000);
     } else {
-        Serial.println("Erreur enregistrement ancienne structure");
+        Serial.println("Erreur enregistrement présence");
+        showLCD("Erreur Firebase", "", 2000);
+        beep(100);
+        delay(100);
+        beep(100);
+        delay(100);
+        beep(100);
     }
-    
-    // 5. Mettre à jour les statistiques de la session
-    updateSessionStats();
-    
-    beep(300);
-    showLCD("Presence OK", student->name, 2000);
 }
 
-// ---------- METTRE À JOUR STATISTIQUES DE SESSION ----------
-void updateSessionStats() {
-    String sessionPath = "/sessions/" + currentSessionPath;
+// ---------- METTRE À JOUR STATUT DE SESSION ----------
+void updateSessionStatus() {
+    if (currentSessionId == "") return;
     
-    // Compter les présents dans la session
-    String attendancePath = sessionPath + "/attendance";
-    int presentCount = 0;
+    String today = getCurrentDate();
+    String currentTime = getCurrentTime();
     
-    if (Firebase.getJSON(fbData, attendancePath)) {
-        FirebaseJson &json = fbData.jsonObject();
-        size_t len = json.iteratorBegin();
-        presentCount = len;
-        json.iteratorEnd();
+    // Trouver la session pour la mettre à jour
+    String sessionsPath = "/sessions/" + today;
+    if (!Firebase.getJSON(fbData, sessionsPath)) {
+        return;
     }
     
-    // Récupérer le nombre total d'étudiants dans le groupe
-    int totalStudents = 0;
+    // Vérifier les sessions pour cette salle
+    String roomSessionsPath = sessionsPath + "/" + currentRoom;
+    if (!Firebase.getJSON(fbData, roomSessionsPath)) {
+        return;
+    }
     
-    // Compter les étudiants actifs dans ce groupe
-    for (int i = 0; i < studentCount; i++) {
-        if (students[i].group == currentGroup && students[i].active) {
-            totalStudents++;
+    // Les sessions sont stockées dans un tableau JSON
+    FirebaseJsonArray &sessionsArray = fbData.jsonArray();
+    size_t arrayLen = sessionsArray.size();
+    
+    for (size_t i = 0; i < arrayLen; i++) {
+        FirebaseJsonData sessionData;
+        sessionsArray.get(sessionData, i);
+        
+        if (sessionData.typeNum == FirebaseJson::JSON_OBJECT) {
+            FirebaseJson &sessionJson = sessionData.jsonObject;
+            
+            String sessionId;
+            if (sessionJson.get("session_id", sessionId)) {
+                if (sessionId == currentSessionId) {
+                    // Mettre à jour le statut si nécessaire
+                    String status;
+                    if (sessionJson.get("status", status)) {
+                        if (status == "SCHEDULED") {
+                            sessionJson.set("status", "ACTIVE");
+                            sessionJson.set("started_at", currentTime);
+                            
+                            // Enregistrer la mise à jour
+                            String updatePath = roomSessionsPath + "/" + i;
+                            Firebase.setJSON(fbData, updatePath, sessionJson);
+                            Serial.println("Session mise à jour: ACTIVE");
+                        }
+                    }
+                    break;
+                }
+            }
         }
-    }
-    
-    // Mettre à jour les statistiques
-    FirebaseJson stats;
-    stats.set("total", totalStudents);
-    stats.set("present", presentCount);
-    stats.set("absent", totalStudents - presentCount);
-    stats.set("last_update", getCurrentTime());
-    
-    if (Firebase.setJSON(fbData, sessionPath + "/stats", stats)) {
-        Serial.print("Stats mises à jour: ");
-        Serial.print(presentCount);
-        Serial.print("/");
-        Serial.println(totalStudents);
-    } else {
-        Serial.println("Erreur mise à jour stats");
     }
 }
 
@@ -643,9 +655,6 @@ void setup() {
         ESP.restart();
     }
     
-    // Charger les étudiants
-    loadStudents();
-    
     // Vérifier la session active
     checkActiveSession();
     
@@ -666,6 +675,9 @@ void loop() {
         delay(1000);
         return;
     }
+    
+    // Afficher la session active
+    showLCD("Session active", currentSubjectName, 0);
     
     // Vérifier si un doigt est présent
     int result = finger.getImage();
@@ -715,7 +727,6 @@ void loop() {
             }
             
             delay(1000);
-            showLCD("Pret a scanner", "Posez le doigt", 0);
         }
         else if (result == FINGERPRINT_NOTFOUND) {
             Serial.println("Empreinte non reconnue");
@@ -723,7 +734,6 @@ void loop() {
             beep(100);
             delay(100);
             beep(100);
-            showLCD("Pret a scanner", "Posez le doigt", 0);
         }
     }
     

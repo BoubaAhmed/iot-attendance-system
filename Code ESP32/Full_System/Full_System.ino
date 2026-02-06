@@ -23,6 +23,7 @@ Adafruit_Fingerprint finger(&mySerial);
 
 // ---------- ESP32 ID (À MODIFIER SELON VOTRE ESP32) ----------
 #define ESP32_ID "ESP32_A" // Changez en "ESP32_B" pour l'autre salle
+#define Room
 
 FirebaseData fbData;
 FirebaseAuth fbAuth;
