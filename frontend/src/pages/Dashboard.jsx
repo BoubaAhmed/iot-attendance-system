@@ -74,6 +74,7 @@ const Dashboard = () => {
       },
     },
   });
+  console.log("dashboardData", dashboardData);
   const [error, setError] = useState(null);
   const [autoRefresh] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);

@@ -33,10 +33,6 @@ import {
   FiChevronUp,
   FiRefreshCw,
   FiPercent,
-  FiActivity,
-  FiPlayCircle,
-  FiStopCircle,
-  FiEye,
   FiCheckCircle,
   FiXCircle,
   FiSearch,
@@ -46,13 +42,6 @@ import {
   FiPieChart,
   FiZap,
   FiUserX,
-  FiUser,
-  FiEyeOff,
-  FiPrinter,
-  FiFileText,
-  FiAlertCircle,
-  FiCheck,
-  FiX,
   FiBook,
   FiBookOpen,
   FiMessageSquare,
@@ -110,127 +99,7 @@ const Attendance = () => {
     };
   }, [autoRefresh]);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      // Local arrays to avoid relying on stale state during this async function
-      let roomsArray = [];
-      let groupsArray = [];
-      let studentsArray = [];
-      // Fetch rooms
-      const roomsRes = await roomAPI.getAll();
-      if (roomsRes.data.success) {
-        const roomsData = roomsRes.data.data || {};
-        roomsArray = Object.entries(roomsData).map(([id, data]) => ({
-          id,
-          ...data,
-        }));
-        setRooms(roomsArray);
-      }
-
-      // Fetch groups
-      const groupsRes = await groupAPI.getAll();
-      if (groupsRes.data.success) {
-        const groupsData = groupsRes.data.data || {};
-        groupsArray = Object.entries(groupsData).map(([id, data]) => ({
-          id,
-          ...data,
-        }));
-        setGroups(groupsArray);
-      }
-
-      // Fetch students
-      const studentsRes = await studentAPI.getAll();
-      if (studentsRes.data.success) {
-        const studentsData = studentsRes.data.data || {};
-        studentsArray = Object.entries(studentsData).map(([id, data]) => ({
-          id,
-          ...data,
-        }));
-        setStudents(studentsArray);
-      }
-
-      // Fetch attendance data
-      const params = {
-        date: selectedDate,
-      };
-
-      // Add room filter if not "all"
-      if (selectedRoom !== "all") {
-        // Find room name from room id
-        const roomObj =
-          roomsArray.find((r) => r.id === selectedRoom) ||
-          rooms.find((r) => r.id === selectedRoom);
-        if (roomObj) {
-          params.room = roomObj.name; // Use room name for filtering as per backend API
-        }
-      }
-
-      // Add group filter if not "all"
-      if (selectedGroup !== "all") {
-        params.group = selectedGroup;
-      }
-
-      const attendanceRes = await attendanceAPI.getAll(params);
-      let attendanceArray = [];
-
-      if (attendanceRes.data.success) {
-        attendanceArray = attendanceRes.data.data || [];
-        setAttendanceData(attendanceArray);
-      }
-
-      // Fetch today's sessions
-      let todaySessions = [];
-      try {
-        const sessionsRes = await sessionAPI.getToday();
-        if (sessionsRes.data.success) {
-          const sessionsData = sessionsRes.data.data || {};
-
-          // Convert sessions data to array
-          todaySessions = [];
-          for (const date in sessionsData) {
-            for (const roomId in sessionsData[date]) {
-              const roomSessions = sessionsData[date][roomId];
-              for (const sessionId in roomSessions) {
-                todaySessions.push({
-                  id: sessionId,
-                  room: roomId,
-                  date: date,
-                  ...roomSessions[sessionId],
-                });
-              }
-            }
-          }
-
-          // Filter by room if selected
-          if (selectedRoom !== "all") {
-            todaySessions = todaySessions.filter(
-              (session) => session.room === selectedRoom,
-            );
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching sessions:", error);
-      }
-
-      setSessions(todaySessions);
-      calculateStats(todaySessions, attendanceArray, studentsArray);
-    } catch (error) {
-      console.error("Error loading data:", error);
-      setAttendanceData([]);
-      setSessions([]);
-      setStats(null);
-    } finally {
-      setLoading(false);
-      setLastUpdated(new Date());
-    }
-  };
-
-  const calculateStats = (
-    sessionsList,
-    attendanceRecords,
-    allStudents = [],
-  ) => {
+  const calculateStats = (sessionsList, attendanceRecords, allStudents = []) => {
     const totalPresent = attendanceRecords.filter(
       (record) => record.status === "PRESENT",
     ).length;
@@ -270,40 +139,45 @@ const Attendance = () => {
     });
 
     // Sessions status
+    const today = new Date().toISOString().split('T')[0];
     const activeSessions = sessionsList.filter((session) => {
+      console.log("Evaluating session for active status:", session);
+      if (session.date !== selectedDate) return false;
+      
+      if (session.status === "ACTIVE") return true;
+      
       // Determine if session is active based on current time
       const now = new Date();
-      const today = now.toISOString().split("T")[0];
+      const sessionDate = session.date;
 
-      if (session.date !== today) return false;
+      if (sessionDate !== today) return false;
 
-      const [startHour, startMinute] = session.start.split(":").map(Number);
-      const [endHour, endMinute] = session.end.split(":").map(Number);
+      try {
+        if (!session.start || !session.end) return false;
+        
+        const [startHour, startMinute] = session.start.split(":").map(Number);
+        const [endHour, endMinute] = session.end.split(":").map(Number);
 
-      const sessionStart = new Date();
-      sessionStart.setHours(startHour, startMinute, 0, 0);
+        const sessionStart = new Date();
+        sessionStart.setHours(startHour, startMinute, 0, 0);
 
-      const sessionEnd = new Date();
-      sessionEnd.setHours(endHour, endMinute, 0, 0);
+        const sessionEnd = new Date();
+        sessionEnd.setHours(endHour, endMinute, 0, 0);
 
-      return now >= sessionStart && now <= sessionEnd;
+        return now >= sessionStart && now <= sessionEnd;
+      } catch (e) {
+        console.error("Error determining session active status:", e);
+        return false;
+      }
     }).length;
 
     const closedSessions = sessionsList.filter((session) => {
-      // Determine if session is closed (past end time)
-      const now = new Date();
-      const today = now.toISOString().split("T")[0];
-
-      if (session.date !== today) return true;
-
-      const [endHour, endMinute] = session.end.split(":").map(Number);
-      const sessionEnd = new Date();
-      sessionEnd.setHours(endHour, endMinute, 0, 0);
-
-      return now > sessionEnd;
+      return session.date === selectedDate && session.status === "CLOSED";
     }).length;
 
-    const scheduledSessions = sessionsList.length;
+    const scheduledSessions = sessionsList.filter((session) => {
+      return session.date === selectedDate && session.status === "SCHEDULED";
+    }).length;
 
     // Calculate attendance by time of day
     const attendanceByHour = {};
@@ -322,6 +196,7 @@ const Attendance = () => {
       (record) => record.time && record.status === "PRESENT",
     );
     const totalMinutes = presentRecords.reduce((sum, record) => {
+      if (!record.time) return sum;
       const [hours, minutes] = record.time.split(":").map(Number);
       return sum + (hours * 60 + minutes);
     }, 0);
@@ -342,30 +217,114 @@ const Attendance = () => {
       activeSessions,
       closedSessions,
       scheduledSessions,
-      totalSessions: sessionsList.length,
+      totalSessions: sessionsList.filter(s => s.date === selectedDate).length,
       attendanceByHour,
       averageTime,
       totalStudentsInSystem: allStudents.length,
     });
   };
 
-  const handleGenerateSessions = async () => {
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      await sessionAPI.generate({ date: selectedDate });
-      fetchData();
-    } catch (error) {
-      console.error("Error generating sessions:", error);
-      alert("Erreur lors de la génération des sessions: " + error.message);
-    }
-  };
+      // Fetch rooms
+      const roomsRes = await roomAPI.getAll();
+      let roomsArray = [];
+      if (roomsRes.data.success) {
+        const roomsData = roomsRes.data.data || {};
+        roomsArray = Object.entries(roomsData).map(([id, data]) => ({
+          id,
+          ...data,
+        }));
+        setRooms(roomsArray);
+      }
 
-  const handleCloseSession = async (sessionId) => {
-    try {
-      await sessionAPI.stop(sessionId);
-      fetchData();
+      // Fetch groups
+      const groupsRes = await groupAPI.getAll();
+      let groupsArray = [];
+      if (groupsRes.data.success) {
+        const groupsData = groupsRes.data.data || {};
+        groupsArray = Object.entries(groupsData).map(([id, data]) => ({
+          id,
+          ...data,
+        }));
+        setGroups(groupsArray);
+      }
+
+      // Fetch students
+      const studentsRes = await studentAPI.getAll();
+      let studentsArray = [];
+      if (studentsRes.data.success) {
+        const studentsData = studentsRes.data.data || {};
+        studentsArray = Object.entries(studentsData).map(([id, data]) => ({
+          id,
+          ...data,
+        }));
+        setStudents(studentsArray);
+      }
+
+      // Fetch attendance data
+      const params = {
+        date: selectedDate,
+      };
+
+      // Add room filter if not "all"
+      if (selectedRoom !== "all") {
+        params.room = selectedRoom;
+      }
+
+      // Add group filter if not "all"
+      if (selectedGroup !== "all") {
+        params.group = selectedGroup;
+      }
+
+      const attendanceRes = await attendanceAPI.getAll(params);
+      let attendanceArray = [];
+
+      if (attendanceRes.data.success) {
+        attendanceArray = attendanceRes.data.data || [];
+        setAttendanceData(attendanceArray);
+      }
+
+      // Fetch sessions for the selected date
+      let sessionsArray = [];
+      try {
+        // Get sessions for the selected date
+        const sessionsRes = await sessionAPI.getAll({ date: selectedDate });
+        console.log("Sessions response:", sessionsRes);
+        console.log("Sessions for date:", selectedDate);
+        if (sessionsRes.data.success) {
+          const sessionsData = sessionsRes.data.data || [];
+          sessionsArray = sessionsData;
+          
+          // Filter by room if selected
+          if (selectedRoom !== "all") {
+            sessionsArray = sessionsArray.filter(
+              (session) => session.room === selectedRoom,
+            );
+          }
+          
+          // Filter by group if selected
+          if (selectedGroup !== "all") {
+            sessionsArray = sessionsArray.filter(
+              (session) => session.group === selectedGroup,
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching sessions:", error);
+      }
+
+      setSessions(sessionsArray);
+      calculateStats(sessionsArray, attendanceArray, studentsArray);
     } catch (error) {
-      console.error("Error closing session:", error);
-      alert("Erreur lors de la fermeture de la session: " + error.message);
+      console.error("Error loading data:", error);
+      setAttendanceData([]);
+      setSessions([]);
+      setStats(null);
+    } finally {
+      setLoading(false);
+      setLastUpdated(new Date());
     }
   };
 
@@ -376,10 +335,10 @@ const Attendance = () => {
 
   const handleExportCSV = () => {
     let csvContent =
-      "Date,Time,Room,Group,Student,Status,Method,Fingerprint ID\n";
+      "Date,Time,Room,Group,Student,Status,Method,Session Start,Session End,Subject\n";
 
     attendanceData.forEach((record) => {
-      csvContent += `"${record.date}","${record.time || ""}","${record.room || ""}","${record.group_name || record.group_id || ""}","${record.student_name || ""}","${record.status}","${record.method || "FINGERPRINT"}","${record.fingerprint_id || ""}"\n`;
+      csvContent += `"${record.date || ""}","${record.time || ""}","${record.room_name || record.room || ""}","${record.group_name || record.group_id || ""}","${record.student_name || ""}","${record.status || ""}","${record.method || ""}","${record.session_start || ""}","${record.session_end || ""}","${record.subject_name || record.subject || ""}"\n`;
     });
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -409,6 +368,7 @@ const Attendance = () => {
       filtered = filtered.filter(
         (record) =>
           record.student_name?.toLowerCase().includes(searchLower) ||
+          record.room_name?.toLowerCase().includes(searchLower) ||
           record.room?.toLowerCase().includes(searchLower) ||
           record.group_name?.toLowerCase().includes(searchLower) ||
           record.group_id?.toLowerCase().includes(searchLower),
@@ -473,15 +433,15 @@ const Attendance = () => {
   const hourlyAttendanceChartData = {
     labels: stats?.attendanceByHour
       ? Object.keys(stats.attendanceByHour)
-          .sort()
-          .map((hour) => `${hour}:00`)
+          .sort((a, b) => parseInt(a) - parseInt(b))
+          .map((hour) => `${hour.padStart(2, '0')}:00`)
       : [],
     datasets: [
       {
         label: "Présences",
         data: stats?.attendanceByHour
           ? Object.entries(stats.attendanceByHour)
-              .sort(([a], [b]) => a - b)
+              .sort(([a], [b]) => parseInt(a) - parseInt(b))
               .map(([, count]) => count)
           : [],
         backgroundColor: "rgba(139, 92, 246, 0.8)",
@@ -560,15 +520,6 @@ const Attendance = () => {
             >
               <FiRefreshCw className="h-4 w-4" />
               Actualiser
-            </button>
-
-            <button
-              onClick={handleGenerateSessions}
-              style={{ backgroundColor: "#FE7F2D" }}
-              className="flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
-            >
-              <FiPlayCircle className="h-5 w-5" />
-              Générer Sessions
             </button>
           </div>
         </div>
@@ -731,7 +682,7 @@ const Attendance = () => {
             </div>
 
             {/* Room Distribution */}
-            {Object.keys(stats.byRoom || {}).length > 0 && (
+            {stats.byRoom && Object.keys(stats.byRoom).length > 0 && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div>
@@ -978,7 +929,7 @@ const Attendance = () => {
                   );
 
                   return (
-                    <div key={index} className="p-4 hover:bg-gray-50">
+                    <div key={`${record.session_id}_${record.student_id}_${index}`} className="p-4 hover:bg-gray-50">
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -1008,10 +959,10 @@ const Attendance = () => {
                                 {record.group_name}
                               </span>
                             )}
-                            {record.room && (
+                            {record.room_name && (
                               <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs">
                                 <FiHome className="inline mr-1 h-3 w-3" />
-                                {record.room}
+                                {record.room_name}
                               </span>
                             )}
                             {record.time && (
@@ -1029,6 +980,17 @@ const Attendance = () => {
                             </span>
                             {record.fingerprint_id && (
                               <span>ID Empreinte: {record.fingerprint_id}</span>
+                            )}
+                            {record.subject_name && (
+                              <span className="flex items-center">
+                                <FiBook className="mr-1 h-4 w-4" />
+                                {record.subject_name}
+                              </span>
+                            )}
+                            {record.method && (
+                              <span>
+                                Méthode: {record.method === "FINGERPRINT" ? "Empreinte" : "Manuel"}
+                              </span>
                             )}
                           </div>
                         </div>
@@ -1153,18 +1115,24 @@ const Attendance = () => {
 
           <div className="divide-y divide-gray-200">
             {sessions.map((session) => {
-              const isExpanded = expandedSessions[session.id];
+              const isExpanded = expandedSessions[session.session_id];
               const room = rooms.find((r) => r.id === session.room);
               const group = groups.find((g) => g.id === session.group);
               const attendanceForSession = attendanceData.filter(
                 (record) =>
                   record.group_id === session.group &&
-                  record.date === selectedDate,
+                  record.date === selectedDate &&
+                  record.room === session.room &&
+                  (record.session_start === session.start?.replace(':', '') || 
+                   record.session_id === session.session_id)
               );
 
               const presentCount = attendanceForSession.filter(
                 (a) => a.status === "PRESENT",
               ).length;
+              // const absentCount = attendanceForSession.filter(
+              //   (a) => a.status === "ABSENT",
+              // ).length;
               const totalStudentsInGroup = students.filter(
                 (s) => s.group === session.group,
               ).length;
@@ -1174,13 +1142,13 @@ const Attendance = () => {
                   : 0;
 
               return (
-                <div key={session.id} className="p-4 hover:bg-gray-50">
+                <div key={session.session_id} className="p-4 hover:bg-gray-50">
                   {/* Session Header */}
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex flex-wrap items-center gap-2 mb-3">
                         <h3 className="text-lg font-semibold text-gray-900">
-                          {session.subject || "Session"}
+                          {session.subject_name || session.subject || "Session"}
                         </h3>
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1222,21 +1190,17 @@ const Attendance = () => {
                           <FiUsers className="inline mr-1 h-4 w-4" />
                           {presentCount}/{totalStudentsInGroup} étudiants
                         </span>
+                        {session.auto_created && (
+                          <span className="text-xs text-gray-400">
+                            (Générée automatiquement)
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {session.status === "ACTIVE" && (
-                        <button
-                          onClick={() => handleCloseSession(session.id)}
-                          className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
-                        >
-                          <FiStopCircle className="h-4 w-4" />
-                          Terminer
-                        </button>
-                      )}
                       <button
-                        onClick={() => toggleSession(session.id)}
+                        onClick={() => toggleSession(session.session_id)}
                         className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
                       >
                         {isExpanded ? "Masquer" : "Afficher"}
@@ -1284,7 +1248,7 @@ const Attendance = () => {
                                 );
 
                                 return (
-                                  <tr key={index} className="hover:bg-gray-50">
+                                  <tr key={`${record.session_id}_${record.student_id}_${index}`} className="hover:bg-gray-50">
                                     <td className="px-4 py-3">
                                       <div className="flex items-center">
                                         <div
@@ -1357,14 +1321,6 @@ const Attendance = () => {
                 <p className="text-gray-500 max-w-md mx-auto mb-6">
                   Aucune session n'a été générée pour cette date.
                 </p>
-                <button
-                  onClick={handleGenerateSessions}
-                  style={{ backgroundColor: "#FE7F2D" }}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-white rounded-lg hover:opacity-90 transition-colors"
-                >
-                  <FiPlayCircle className="h-4 w-4" />
-                  Générer Sessions
-                </button>
               </div>
             )}
           </div>

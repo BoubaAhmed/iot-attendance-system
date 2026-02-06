@@ -2,8 +2,6 @@
 import api from './api';
 
 const attendanceAPI = {
-  // Record attendance (ESP32 - Fingerprint only)
-  record: (data) => api.post('/attendance', data),
 
   // Get attendance with filters
   // params: { date, room, group, student_id }
@@ -29,9 +27,6 @@ const attendanceAPI = {
   getTodayByStudent: (student_id) =>
     api.get(`/attendance/student/${student_id}/today`),
 
-  // Manually mark student as absent
-  markAbsent: (data) => api.post('/attendance/mark-absent', data),
-
   // Get attendance statistics
   // params: { date, group_id }
   getStats: (params = {}) => {
@@ -39,9 +34,6 @@ const attendanceAPI = {
     return api.get(`/attendance/stats${query ? `?${query}` : ''}`);
   },
 
-  // Get today's attendance for a specific room
-  getTodayByRoom: (room_id) =>
-    api.get(`/attendance/room/${room_id}/today`),
 };
 
 export default attendanceAPI;

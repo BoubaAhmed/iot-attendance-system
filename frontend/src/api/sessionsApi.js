@@ -12,18 +12,6 @@ const sessionAPI = {
     // Get today's sessions
     getToday: () => api.get('/sessions/today'),
 
-    // Check for scheduled/active session (ESP32)
-    check: (esp32_id) =>
-        api.get(`/sessions/check?esp32_id=${esp32_id}`),
-
-    // Start session (ESP32)
-    start: (esp32_id) =>
-        api.post(`/sessions/start?esp32_id=${esp32_id}`),
-
-    // Stop session (ESP32)
-    stop: (esp32_id) =>
-        api.post(`/sessions/stop?esp32_id=${esp32_id}`),
-
     // Manually generate sessions (admin)
     // date format: YYYY-MM-DD
     generate: (date) =>
