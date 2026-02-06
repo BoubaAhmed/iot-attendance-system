@@ -77,7 +77,8 @@ def internal_error(error):
 def bad_request(error):
     return jsonify({'success': False, 'error': 'Bad request'}), 400
 
-init_scheduler(app)
+if not app.debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    init_scheduler(app)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
