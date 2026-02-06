@@ -2,9 +2,33 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 from firebase_config import firebase
-from utils import get_student_by_fingerprint
+import re
 
 dashboard_bp = Blueprint('dashboard', __name__)
+
+def parse_session_id(session_id):
+    """Parse session_id to extract date, room, time, and group"""
+    try:
+        # Format: YYYYMMDD_room_startTime_group
+        parts = session_id.split('_')
+        if len(parts) >= 4:
+            date_str = parts[0]
+            # Handle rooms with underscores in name (like "salle_info_1")
+            if len(parts) == 5:  # room has 2 underscores
+                room = f"{parts[1]}_{parts[2]}"
+                start_time = parts[3]
+                group = parts[4]
+            else:  # room has 1 underscore or none
+                room = parts[1]
+                start_time = parts[2]
+                group = parts[3]
+            
+            # Convert date from YYYYMMDD to YYYY-MM-DD
+            formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+            return formatted_date, room, start_time, group
+    except:
+        pass
+    return None, None, None, None
 
 @dashboard_bp.route('/api/dashboard/stats', methods=['GET'])
 def get_dashboard_stats():
@@ -25,7 +49,7 @@ def get_dashboard_stats():
         # Get today's date
         today = datetime.now().strftime('%Y-%m-%d')
         
-        # Get today's sessions - Fixed: sessions are nested under date, then room
+        # Get today's sessions
         all_sessions = firebase.get_all('sessions') or {}
         today_sessions = []
         active_sessions = 0
@@ -35,30 +59,28 @@ def get_dashboard_stats():
             today_date_sessions = all_sessions.get(today, {})
             if isinstance(today_date_sessions, dict):
                 for room_id, room_sessions in today_date_sessions.items():
-                    if isinstance(room_sessions, dict):
-                        for session_key, session_data in room_sessions.items():
+                    if isinstance(room_sessions, list):
+                        for session_data in room_sessions:
                             if isinstance(session_data, dict):
                                 today_sessions.append(session_data)
                                 if session_data.get('status') == 'OPEN':
                                     active_sessions += 1
         
-        # Get today's attendance - Fixed: attendance is grouped by group, then date
+        # Get today's attendance from attendance collection
         today_attendance_count = 0
         all_attendance = firebase.get_all('attendance') or {}
         
-        for group_id, dates_data in all_attendance.items():
-            if not isinstance(dates_data, dict):
+        for session_id, attendance_data in all_attendance.items():
+            if not isinstance(attendance_data, dict):
                 continue
             
-            # Get today's attendance for this group
-            today_group_data = dates_data.get(today, {})
-            if not isinstance(today_group_data, dict):
-                continue
-            
-            # Count present students
-            present_data = today_group_data.get('present', {})
-            if isinstance(present_data, dict):
-                today_attendance_count += len(present_data)
+            # Parse session_id to get date
+            session_date, _, _, _ = parse_session_id(session_id)
+            if session_date == today:
+                # Count present students for today
+                present_data = attendance_data.get('present', {})
+                if isinstance(present_data, dict):
+                    today_attendance_count += len(present_data)
         
         return jsonify({
             'success': True,
@@ -98,41 +120,44 @@ def get_analytics():
         total_absent = 0
         
         all_attendance = firebase.get_all('attendance') or {}
+        all_students = firebase.get_all('students') or {}
         
+        # Group attendance by date
+        date_attendance = {}
         for date in dates:
-            present_count = 0
-            absent_count = 0
+            date_attendance[date] = {'present': 0, 'absent': 0}
+        
+        for session_id, attendance_record in all_attendance.items():
+            if not isinstance(attendance_record, dict):
+                continue
             
-            # Check attendance for this date across all groups
-            for group_id, dates_data in all_attendance.items():
-                if not isinstance(dates_data, dict):
-                    continue
-                
-                date_data = dates_data.get(date, {})
-                if not isinstance(date_data, dict):
-                    continue
-                
-                # Count present
-                present_records = date_data.get('present', {})
-                if isinstance(present_records, dict):
-                    present_count += len(present_records)
-                
-                # Count absent
-                absent_records = date_data.get('absent', {})
-                if isinstance(absent_records, dict):
-                    absent_count += len(absent_records)
+            # Parse session_id to get date
+            session_date, _, _, _ = parse_session_id(session_id)
+            if session_date not in dates:
+                continue
             
+            # Count present
+            present_records = attendance_record.get('present', {})
+            if isinstance(present_records, dict):
+                date_attendance[session_date]['present'] += len(present_records)
+                total_present += len(present_records)
+            
+            # Count absent
+            absent_records = attendance_record.get('absent', {})
+            if isinstance(absent_records, dict):
+                date_attendance[session_date]['absent'] += len(absent_records)
+                total_absent += len(absent_records)
+        
+        # Convert to list format
+        for date, counts in date_attendance.items():
             attendance_data.append({
                 'date': date,
-                'present': present_count,
-                'absent': absent_count,
-                'total': present_count + absent_count
+                'present': counts['present'],
+                'absent': counts['absent'],
+                'total': counts['present'] + counts['absent']
             })
-            
-            total_present += present_count
-            total_absent += absent_count
         
-        # Get room utilization - Fixed: sessions are nested under date, then room
+        # Get room utilization
         rooms = firebase.get_all('rooms') or {}
         room_utilization = []
         
@@ -144,15 +169,15 @@ def get_analytics():
                 session_count = 0
                 
                 for date_key, date_sessions in all_sessions.items():
-                    if date_key not in dates:  # Only consider dates in range
+                    if date_key not in dates:
                         continue
                     
                     if not isinstance(date_sessions, dict):
                         continue
                     
-                    room_sessions = date_sessions.get(room_id, {})
-                    if isinstance(room_sessions, dict):
-                        session_count += len(room_sessions)
+                    room_sessions_list = date_sessions.get(room_id, [])
+                    if isinstance(room_sessions_list, list):
+                        session_count += len(room_sessions_list)
                 
                 # Calculate utilization percentage
                 utilization = round(min(100, (session_count / days) * 100), 2) if days > 0 else 0
@@ -171,33 +196,32 @@ def get_analytics():
         for group_id, group_data in groups.items():
             present_count = 0
             absent_count = 0
-            total_count = 0
             
-            # Get attendance for this group across all dates
-            group_attendance_data = all_attendance.get(group_id, {})
-            if isinstance(group_attendance_data, dict):
-                for date, date_data in group_attendance_data.items():
-                    if date not in dates:  # Only consider dates in range
-                        continue
-                    
-                    if not isinstance(date_data, dict):
-                        continue
-                    
-                    # Count present
-                    present_records = date_data.get('present', {})
-                    if isinstance(present_records, dict):
-                        present_count += len(present_records)
-                    
-                    # Count absent
-                    absent_records = date_data.get('absent', {})
-                    if isinstance(absent_records, dict):
-                        absent_count += len(absent_records)
+            # Count attendance for this group in date range
+            for session_id, attendance_record in all_attendance.items():
+                if not isinstance(attendance_record, dict):
+                    continue
+                
+                # Parse session_id to get date and group
+                session_date, _, _, session_group = parse_session_id(session_id)
+                if session_group != group_id or session_date not in dates:
+                    continue
+                
+                # Count present
+                present_records = attendance_record.get('present', {})
+                if isinstance(present_records, dict):
+                    present_count += len(present_records)
+                
+                # Count absent
+                absent_records = attendance_record.get('absent', {})
+                if isinstance(absent_records, dict):
+                    absent_count += len(absent_records)
             
             total_count = present_count + absent_count
             attendance_rate = (present_count / total_count * 100) if total_count > 0 else 0
             
             # Count students in group
-            students_in_group = sum(1 for student_id, student in (firebase.get_all('students') or {}).items() 
+            students_in_group = sum(1 for student_id, student in all_students.items() 
                                    if isinstance(student, dict) and student.get('group') == group_id)
             
             group_attendance.append({
@@ -238,69 +262,85 @@ def get_recent_activity():
         limit = int(request.args.get('limit', 10))
         
         all_attendance = firebase.get_all('attendance') or {}
+        all_students = firebase.get_all('students') or {}
+        all_sessions = firebase.get_all('sessions') or {}
         recent_activity = []
         
-        # Collect all attendance records
-        for group_id, dates_data in all_attendance.items():
-            if not isinstance(dates_data, dict):
+        for session_id, attendance_record in all_attendance.items():
+            if not isinstance(attendance_record, dict):
                 continue
             
-            for date, date_data in dates_data.items():
-                if not isinstance(date_data, dict):
-                    continue
-                
-                # Process present records
-                present_data = date_data.get('present', {})
-                if isinstance(present_data, dict):
-                    for student_id, record in present_data.items():
-                        if isinstance(record, dict):
-                            # Get student info
-                            student = firebase.get_one('students', student_id) or {}
-                            
-                            # Create a timestamp from date and time
-                            record_time = record.get('time', '00:00')
-                            try:
-                                # Combine date and time for sorting
-                                timestamp_str = f"{date} {record_time}"
-                                timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M')
-                            except:
-                                timestamp = datetime.now()
-                            
-                            recent_activity.append({
-                                'type': 'PRESENT',
-                                'date': date,
-                                'time': record_time,
-                                'student_id': student_id,
-                                'student_name': student.get('name') or record.get('name', 'Unknown'),
-                                'group': group_id,
-                                'room': record.get('room', ''),
-                                'timestamp': timestamp.isoformat()
-                            })
-                
-                # Process absent records
-                absent_data = date_data.get('absent', {})
-                if isinstance(absent_data, dict):
-                    for student_id, record in absent_data.items():
-                        if isinstance(record, dict):
-                            # Get student info
-                            student = firebase.get_one('students', student_id) or {}
-                            
-                            # For absent records, use date only
-                            try:
-                                timestamp = datetime.strptime(date, '%Y-%m-%d')
-                            except:
-                                timestamp = datetime.now()
-                            
-                            recent_activity.append({
-                                'type': 'ABSENT',
-                                'date': date,
-                                'time': None,
-                                'student_id': student_id,
-                                'student_name': student.get('name') or record.get('name', 'Unknown'),
-                                'group': group_id,
-                                'room': None,
-                                'timestamp': timestamp.isoformat()
-                            })
+            # Parse session_id to get date
+            session_date, room_id, start_time, group_id = parse_session_id(session_id)
+            if not session_date:
+                continue
+            
+            # Get session details for more context
+            session_details = None
+            if session_date in all_sessions:
+                date_sessions = all_sessions.get(session_date, {})
+                if isinstance(date_sessions, dict) and room_id in date_sessions:
+                    room_sessions = date_sessions.get(room_id, [])
+                    if isinstance(room_sessions, list):
+                        for session in room_sessions:
+                            if isinstance(session, dict) and session.get('session_id') == session_id:
+                                session_details = session
+                                break
+            
+            # Process present records
+            present_data = attendance_record.get('present', {})
+            if isinstance(present_data, dict):
+                for student_id, record in present_data.items():
+                    if isinstance(record, dict):
+                        # Get student info
+                        student = all_students.get(student_id, {})
+                        
+                        # Create timestamp
+                        record_time = record.get('time', '00:00')
+                        try:
+                            timestamp_str = f"{session_date} {record_time}"
+                            timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M')
+                        except:
+                            timestamp = datetime.now()
+                        
+                        recent_activity.append({
+                            'type': 'PRESENT',
+                            'date': session_date,
+                            'time': record_time,
+                            'student_id': student_id,
+                            'student_name': student.get('name') or record.get('name', 'Unknown'),
+                            'group': group_id,
+                            'room': room_id,
+                            'session_id': session_id,
+                            'subject': session_details.get('subject') if session_details else None,
+                            'timestamp': timestamp.isoformat()
+                        })
+            
+            # Process absent records
+            absent_data = attendance_record.get('absent', {})
+            if isinstance(absent_data, dict):
+                for student_id, record in absent_data.items():
+                    if isinstance(record, dict):
+                        # Get student info
+                        student = all_students.get(student_id, {})
+                        
+                        try:
+                            timestamp = datetime.strptime(session_date, '%Y-%m-%d')
+                        except:
+                            timestamp = datetime.now()
+                        
+                        recent_activity.append({
+                            'type': 'ABSENT',
+                            'date': session_date,
+                            'time': None,
+                            'student_id': student_id,
+                            'student_name': student.get('name') or record.get('name', 'Unknown'),
+                            'group': group_id,
+                            'room': room_id,
+                            'session_id': session_id,
+                            'subject': session_details.get('subject') if session_details else None,
+                            'timestamp': timestamp.isoformat()
+                        })
         
         # Sort by timestamp (most recent first)
         recent_activity.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
@@ -331,17 +371,16 @@ def get_room_status():
             if not isinstance(room_data, dict):
                 continue
             
-            # Find current session for this room - Fixed: sessions are nested under date
+            # Find current session for this room
             current_session = None
             if today in all_sessions:
                 today_sessions = all_sessions.get(today, {})
                 if isinstance(today_sessions, dict) and room_id in today_sessions:
-                    room_sessions = today_sessions.get(room_id, {})
-                    if isinstance(room_sessions, dict):
-                        # Look for OPEN session or determine based on time
-                        for session_key, session in room_sessions.items():
+                    room_sessions_list = today_sessions.get(room_id, [])
+                    if isinstance(room_sessions_list, list):
+                        # Look for session that matches current time
+                        for session in room_sessions_list:
                             if isinstance(session, dict):
-                                session_status = session.get('status', '')
                                 session_start = session.get('start', '00:00')
                                 session_end = session.get('end', '23:59')
                                 
@@ -353,10 +392,11 @@ def get_room_status():
             # Determine room status
             status = 'IDLE'
             if current_session:
-                # Check session status
                 session_status = current_session.get('status', '')
                 if session_status == 'OPEN':
                     status = 'ACTIVE'
+                elif session_status == 'CLOSED':
+                    status = 'COMPLETED'
                 else:
                     # Determine based on time
                     session_start = current_session.get('start', '00:00')
@@ -375,7 +415,8 @@ def get_room_status():
                 'status': status,
                 'active': room_data.get('active', False),
                 'current_session': current_session,
-                'esp32_id': room_data.get('esp32_id', '')
+                'esp32_id': room_data.get('esp32_id', ''),
+                'capacity': room_data.get('capacity', 0)
             })
         
         return jsonify({
@@ -399,8 +440,8 @@ def get_upcoming_sessions():
         if today in all_sessions:
             today_sessions = all_sessions.get(today, {})
             if isinstance(today_sessions, dict):
-                for room_id, room_sessions in today_sessions.items():
-                    if not isinstance(room_sessions, dict):
+                for room_id, room_sessions_list in today_sessions.items():
+                    if not isinstance(room_sessions_list, list):
                         continue
                     
                     # Get room info
@@ -408,17 +449,18 @@ def get_upcoming_sessions():
                     if not isinstance(room_data, dict):
                         continue
                     
-                    for session_key, session in room_sessions.items():
+                    for session in room_sessions_list:
                         if isinstance(session, dict):
                             session_start = session.get('start', '00:00')
+                            session_status = session.get('status', '')
                             
-                            # Only include future sessions
-                            if session_start > current_time:
+                            # Only include future sessions that are not CLOSED
+                            if session_start > current_time and session_status != 'CLOSED':
                                 upcoming_sessions.append({
                                     'room_id': room_id,
                                     'room_name': room_data.get('name', room_id),
                                     'session': session,
-                                    'time_until': f"Dans {self._calculate_time_until(session_start, current_time)}"
+                                    'time_until': _calculate_time_until(session_start, current_time)
                                 })
         
         # Sort by start time
@@ -426,7 +468,7 @@ def get_upcoming_sessions():
         
         return jsonify({
             'success': True,
-            'data': upcoming_sessions[:5],  # Return only 5 upcoming sessions
+            'data': upcoming_sessions[:5],
             'count': len(upcoming_sessions)
         })
     except Exception as e:
@@ -452,25 +494,32 @@ def get_group_performance():
                 if isinstance(student, dict) and student.get('group') == group_id
             ]
             
-            # Get attendance for this group
-            group_attendance = all_attendance.get(group_id, {})
-            if not isinstance(group_attendance, dict):
-                group_attendance = {}
-            
-            # Calculate attendance stats
+            # Calculate attendance stats for this group
             total_present = 0
             total_absent = 0
-            attendance_dates = []
+            attendance_dates = set()
             
-            for date, date_data in group_attendance.items():
-                if isinstance(date_data, dict):
-                    present_count = len(date_data.get('present', {}))
-                    absent_count = len(date_data.get('absent', {}))
-                    total_present += present_count
-                    total_absent += absent_count
-                    
-                    if present_count + absent_count > 0:
-                        attendance_dates.append(date)
+            for session_id, attendance_record in all_attendance.items():
+                if not isinstance(attendance_record, dict):
+                    continue
+                
+                # Parse session_id to get date and group
+                session_date, _, _, session_group = parse_session_id(session_id)
+                if session_group != group_id:
+                    continue
+                
+                if session_date:
+                    attendance_dates.add(session_date)
+                
+                # Count present
+                present_data = attendance_record.get('present', {})
+                if isinstance(present_data, dict):
+                    total_present += len(present_data)
+                
+                # Count absent
+                absent_data = attendance_record.get('absent', {})
+                if isinstance(absent_data, dict):
+                    total_absent += len(absent_data)
             
             total_attendance = total_present + total_absent
             attendance_rate = (total_present / total_attendance * 100) if total_attendance > 0 else 0
