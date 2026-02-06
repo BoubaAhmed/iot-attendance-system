@@ -176,6 +176,54 @@
           "time": "16:08"
         }
       }
+    },
+    "20260206_roomA_0800_G1": {
+      "present": {
+        "S1": {
+          "name": "Ahmed Bouba",
+          "time": "08:05"
+        },
+        "S3": {
+          "name": "Lkhalidi Mohamed",
+          "time": "08:10"
+        }
+      }
+    },
+    "20260206_roomA_1000_G2": {
+      "present": {
+        "S2": {
+          "name": "Hicham Moussaid",
+          "time": "10:05"
+        },
+        "S4": {
+          "name": "Amine El Hanine",
+          "time": "10:12"
+        }
+      }
+    },
+    "20260206_roomB_0800_G2": {
+      "present": {
+        "S2": {
+          "name": "Hicham Moussaid",
+          "time": "08:05"
+        },
+        "S4": {
+          "name": "Amine El Hanine",
+          "time": "08:10"
+        }
+      }
+    },
+    "20260206_roomB_1400_G1":{
+      "present": {
+        "S1": {
+          "name": "Ahmed Bouba",
+          "time": "14:05"
+        },
+        "S3": {
+          "name": "Lkhalidi Mohamed",
+          "time": "14:10"
+        }
+      }
     }
   },
   "groups": {
@@ -566,15 +614,16 @@
         {
           "auto_closed": true,
           "auto_created": true,
-          "closed_at": "2026-02-05T12:02:03.345123",
+          "closed_at": "2026-02-05T16:54:50.389000",
           "created_at": "2026-02-05T10:20:04.089304",
+          "date": "2026-02-05",
           "end": "16:00",
           "group": "G3",
           "room": "infoA",
           "room_name": "Salle info 1",
           "session_id": "20260205_infoA_1400_G3",
           "start": "14:00",
-          "status": "ACTIVE",
+          "status": "CLOSED",
           "subject": "robotics"
         }
       ],
@@ -638,17 +687,91 @@
           "subject": "big_data"
         },
         {
-          "auto_closed": false,
+          "auto_activated": true,
+          "auto_closed": true,
           "auto_created": true,
+          "closed_at": "2026-02-05T20:09:49.558924",
           "created_at": "2026-02-05T10:20:03.322402",
+          "date": "2026-02-05",
           "end": "18:00",
           "group": "G1",
           "room": "roomB",
           "room_name": "Salle IoT",
           "session_id": "20260205_roomB_1600_G1",
           "start": "16:00",
-          "status": "SCHEDULED",
+          "started_at": "2026-02-05T17:09:08.172710",
+          "status": "CLOSED",
           "subject": "robotics"
+        }
+      ]
+    },
+    "2026-02-06": {
+      "roomA": [
+        {
+          "auto_closed": true,
+          "auto_created": true,
+          "closed_at": "2026-02-06T10:23:16.780252",
+          "created_at": "2026-02-06T10:23:00.365965",
+          "date": "2026-02-06",
+          "end": "10:00",
+          "group": "G1",
+          "room": "roomA",
+          "room_name": "Salle Robotics",
+          "session_id": "20260206_roomA_0800_G1",
+          "start": "08:00",
+          "status": "CLOSED",
+          "subject": "iot",
+          "subject_name": "Internet of Things"
+        },
+        {
+          "auto_activated": true,
+          "auto_closed": false,
+          "auto_created": true,
+          "created_at": "2026-02-06T10:23:01.205540",
+          "date": "2026-02-06",
+          "end": "12:00",
+          "group": "G2",
+          "room": "roomA",
+          "room_name": "Salle Robotics",
+          "session_id": "20260206_roomA_1000_G2",
+          "start": "10:00",
+          "started_at": "2026-02-06T10:23:39.804036",
+          "status": "ACTIVE",
+          "subject": "iot",
+          "subject_name": "Internet of Things"
+        }
+      ],
+      "roomB": [
+        {
+          "auto_closed": true,
+          "auto_created": true,
+          "closed_at": "2026-02-06T10:23:17.171253",
+          "created_at": "2026-02-06T10:23:02.051535",
+          "date": "2026-02-06",
+          "end": "10:00",
+          "group": "G2",
+          "room": "roomB",
+          "room_name": "Salle IoT",
+          "session_id": "20260206_roomB_0800_G2",
+          "start": "08:00",
+          "status": "CLOSED",
+          "subject": "robotics",
+          "subject_name": "Robotics"
+        },
+        {
+          "auto_closed": false,
+          "auto_created": true,
+          "created_at": "2026-02-06T10:23:02.917536",
+          "date": "2026-02-06",
+          "end": "16:00",
+          "group": "G1",
+          "room": "roomB",
+          "room_name": "Salle IoT",
+          "session_id": "20260206_roomB_1400_G1",
+          "start": "14:00",
+          "status": "SCHEDULED",
+          "subject": "robotics",
+          "subject_name": "Robotics"
         }
       ]
     }
@@ -721,10 +844,34 @@
       "semester": "S2",
       "teacher_id": "T1"
     },
+    "cyber_security": {
+      "credits": 3,
+      "description": "",
+      "level": "Master 1",
+      "name": "Cyber Security",
+      "semester": "S2",
+      "teacher_id": "T3"
+    },
+    "data_science": {
+      "credits": 4,
+      "description": "",
+      "level": "Master 2",
+      "name": "Data Science",
+      "semester": "S1",
+      "teacher_id": "T4"
+    },
     "iot": {
       "credits": 3,
       "level": "Licence 1",
       "name": "Internet of Things",
+      "semester": "S2",
+      "teacher_id": "T2"
+    },
+    "machine_learning": {
+      "credits": 4,
+      "description": "",
+      "level": "Master 2",
+      "name": "Machine Learning",
       "semester": "S2",
       "teacher_id": "T2"
     },
@@ -750,30 +897,6 @@
       "name": "Web Development",
       "semester": "S2",
       "teacher_id": "T5"
-    },
-    "data_science": {
-      "credits": 4,
-      "description": "",
-      "level": "Master 2",
-      "name": "Data Science",
-      "semester": "S1",
-      "teacher_id": "T4"
-    },
-    "cyber_security": {
-      "credits": 3,
-      "description": "",
-      "level": "Master 1",
-      "name": "Cyber Security",
-      "semester": "S2",
-      "teacher_id": "T3"
-    },
-    "machine_learning": {
-      "credits": 4,
-      "description": "",
-      "level": "Master 2",
-      "name": "Machine Learning",
-      "semester": "S2",
-      "teacher_id": "T2"
     }
   },
   "teachers": {
