@@ -1,179 +1,50 @@
 # routes/attendance.py
 from flask import Blueprint, request, jsonify
-from datetime import datetime, date as date_type
+from datetime import datetime
 from firebase_config import firebase
 
 attendance_bp = Blueprint('attendance', __name__)
 
-def get_room_by_esp32_id(esp32_id):
-    """Find room by ESP32 ID, returns (room_id, room_data)"""
+def parse_session_id(session_id):
+    """Parse session_id to extract date, room, time, and group"""
     try:
-        rooms = firebase.get_all('rooms') or {}
-        for room_id, room_data in rooms.items():
-            if isinstance(room_data, dict) and room_data.get('esp32_id') == esp32_id:
-                return room_id, room_data
-        return None, None
-    except Exception as e:
-        print(f"Error in get_room_by_esp32_id: {e}")
-        return None, None
-
-def get_student_by_fingerprint(fingerprint_id):
-    """Get student by fingerprint ID, returns (student_id, student_data)"""
-    try:
-        students = firebase.get_all('students') or {}
-        for student_id, student_data in students.items():
-            if isinstance(student_data, dict) and student_data.get('fingerprint_id') == fingerprint_id:
-                return student_id, student_data
-        return None, None
-    except Exception as e:
-        print(f"Error in get_student_by_fingerprint: {e}")
-        return None, None
-
-def get_active_session_for_room(room_id):
-    """Find active session for room at current time"""
-    try:
-        today = datetime.now().strftime('%Y-%m-%d')
-        current_time = datetime.now().strftime('%H:%M')
-        
-        # Get sessions for today
-        sessions_data = firebase.get_all(f'sessions/{today}') or {}
-        if not sessions_data:
-            return None
-        
-        # Check if room has sessions today
-        room_sessions = sessions_data.get(room_id)
-        if not room_sessions:
-            return None
-        
-        # Find session that matches current time
-        current_dt = datetime.now()
-        for session_key, session_data in room_sessions.items():
-            if not isinstance(session_data, dict):
-                continue
+        # Format: YYYYMMDD_room_startTime_group
+        parts = session_id.split('_')
+        if len(parts) >= 4:
+            date_str = parts[0]
+            # In your data, rooms don't have underscores (roomA, roomB, infoA)
+            # So the structure is always: date_room_time_group
+            room = parts[1]
+            start_time = parts[2]
+            group = parts[3]
             
-            start_time = session_data.get('start')
-            end_time = session_data.get('end')
-            if not start_time or not end_time:
-                continue
-            
-            # Convert times to datetime objects for comparison
-            try:
-                start_dt = datetime.strptime(f"{today} {start_time}", "%Y-%m-%d %H:%M")
-                end_dt = datetime.strptime(f"{today} {end_time}", "%Y-%m-%d %H:%M")
-                
-                # Check if current time is within session time
-                if start_dt <= current_dt <= end_dt:
-                    return session_data
-            except ValueError:
-                continue
-        
-        return None
-    except Exception as e:
-        print(f"Error in get_active_session_for_room: {e}")
-        return None
+            # Convert date from YYYYMMDD to YYYY-MM-DD
+            formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+            return formatted_date, room, start_time, group
+    except:
+        pass
+    return None, None, None, None
 
-@attendance_bp.route('/api/attendance', methods=['POST'])
-def record_attendance():
-    """Record attendance (called by ESP32 - Fingerprint only)"""
-    try:
-        data = request.get_json()
-        
-        # Validation
-        required_fields = ['esp32_id', 'fingerprint_id']
-        if not all(field in data for field in required_fields):
-            return jsonify({
-                'success': False,
-                'error': f'Required fields: {required_fields}'
-            }), 400
-        
-        esp32_id = data['esp32_id']
-        fingerprint_id = int(data['fingerprint_id'])
-        
-        # Find room by ESP32 ID
-        room_id, room = get_room_by_esp32_id(esp32_id)
-        if not room or not room.get('active', True):
-            return jsonify({'success': False, 'error': 'Room not found or inactive'}), 404
-        
-        # Find student by fingerprint ID
-        student_id, student_data = get_student_by_fingerprint(fingerprint_id)
-        if not student_data:
-            return jsonify({'success': False, 'error': 'Student not found'}), 404
-        
-        # Check if student is active
-        if not student_data.get('active', True):
-            return jsonify({'success': False, 'error': 'Student is not active'}), 400
-        
-        # Find active session for this room
-        session_data = get_active_session_for_room(room_id)
-        if not session_data:
-            return jsonify({'success': False, 'error': 'No active session in this room'}), 404
-        
-        # Check if student belongs to session group
-        group_id = session_data.get('group')
-        if student_data.get('group') != group_id:
-            return jsonify({'success': False, 'error': 'Student does not belong to session group'}), 400
-        
-        # Record attendance
-        today = datetime.now().strftime('%Y-%m-%d')
-        now = datetime.now()
-        current_time = now.strftime('%H:%M')
-        
-        # Check if attendance already exists for today
-        attendance_path = f'attendance/{group_id}/{today}/present/{student_id}'
-        existing_attendance = firebase.get_one('attendance', attendance_path)
-        
-        if existing_attendance:
-            return jsonify({
-                'success': True,
-                'message': 'Attendance already recorded today',
-                'data': {
-                    'session': f'{today}/{room_id}',
-                    'student': student_data.get('name'),
-                    'room': room.get('name'),
-                    'group': group_id,
-                    'time': existing_attendance.get('time'),
-                    'already_recorded': True
-                }
-            })
-        
-        # Remove from absent list if present
-        absent_path = f'attendance/{group_id}/{today}/absent/{student_id}'
-        existing_absent = firebase.get_one('attendance', absent_path)
-        if existing_absent:
-            firebase.delete('attendance', f'{group_id}/{today}/absent/{student_id}')
-        
-        # Create attendance record
-        attendance_record = {
-            'name': student_data.get('name'),
-            'time': current_time,
-            'room': room.get('name'),
-            'fingerprint_id': fingerprint_id,
-            'timestamp': now.isoformat(),
-            'room_id': room_id,
-            'session_subject': session_data.get('subject'),
-            'session_time': f"{session_data.get('start')}-{session_data.get('end')}"
-        }
-        
-        # Save attendance
-        firebase.update('attendance', f'{group_id}/{today}/present/{student_id}', attendance_record)
-        
-        return jsonify({
-            'success': True,
-            'message': 'Attendance recorded',
-            'data': {
-                'session': f'{today}/{room_id}',
-                'student': student_data.get('name'),
-                'room': room.get('name'),
-                'group': group_id,
-                'time': current_time,
-                'method': 'FINGERPRINT',
-                'student_id': student_id,
-                'subject': session_data.get('subject')
-            }
-        })
-    except Exception as e:
-        print(f"Error recording attendance: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+def get_subject_name(subject_code):
+    """Get subject name from subject code"""
+    if not subject_code:
+        return None
+    subject_data = firebase.get_one('subjects', subject_code)
+    return subject_data.get('name') if subject_data else subject_code
+
+def get_group_name(group_id):
+    """Get group name from group ID"""
+    if not group_id:
+        return None
+    group_data = firebase.get_one('groups', group_id)
+    return group_data.get('name') if group_data else group_id
+
+def get_room_name(room_id):
+    """Get room name from room ID"""
+    if not room_id:
+        return None
+    room_data = firebase.get_one('rooms', room_id)
+    return room_data.get('name') if room_data else room_id
 
 @attendance_bp.route('/api/attendance', methods=['GET'])
 def get_attendance():
@@ -185,89 +56,117 @@ def get_attendance():
         student_id = request.args.get('student_id')
         
         all_attendance = firebase.get_all('attendance') or {}
+        all_sessions = firebase.get_all('sessions') or {}
+        all_subjects = firebase.get_all('subjects') or {}
         filtered_attendance = []
         
-        for group_id, dates_data in all_attendance.items():
-            if group and group_id != group:
+        for session_id, attendance_record in all_attendance.items():
+            if not isinstance(attendance_record, dict):
                 continue
             
-            if not isinstance(dates_data, dict):
+            # Parse session_id to get date, room, group
+            session_date, session_room, session_time, session_group = parse_session_id(session_id)
+            if not session_date:
                 continue
             
-            for attendance_date, status_data in dates_data.items():
-                if date and attendance_date != date:
-                    continue
-                
-                if not isinstance(status_data, dict):
-                    continue
-                
-                # Get group info
-                group_data = firebase.get_one('groups', group_id) or {}
-                group_name = group_data.get('name', group_id)
-                
-                # Process present students
-                present_data = status_data.get('present', {})
-                if isinstance(present_data, dict):
-                    for stud_id, record in present_data.items():
-                        if not isinstance(record, dict):
-                            continue
-                        
-                        if student_id and stud_id != student_id:
-                            continue
-                        
-                        if room and record.get('room') != room:
-                            continue
-                        
-                        # Get student info
-                        student_data = firebase.get_one('students', stud_id) or {}
-                        
-                        filtered_attendance.append({
-                            'date': attendance_date,
-                            'group_id': group_id,
-                            'group_name': group_name,
-                            'student_id': stud_id,
-                            'student_name': student_data.get('name') or record.get('name', 'Unknown'),
-                            'status': 'PRESENT',
-                            'time': record.get('time'),
-                            'room': record.get('room'),
-                            'method': 'FINGERPRINT',
-                            'timestamp': record.get('timestamp'),
-                            'subject': record.get('session_subject'),
-                            'session_time': record.get('session_time')
-                        })
-                
-                # Process absent students
-                absent_data = status_data.get('absent', {})
-                if isinstance(absent_data, dict):
-                    for stud_id, record in absent_data.items():
-                        if not isinstance(record, dict):
-                            continue
-                        
-                        if student_id and stud_id != student_id:
-                            continue
-                        
-                        # Get student info
-                        student_data = firebase.get_one('students', stud_id) or {}
-                        
-                        filtered_attendance.append({
-                            'date': attendance_date,
-                            'group_id': group_id,
-                            'group_name': group_name,
-                            'student_id': stud_id,
-                            'student_name': student_data.get('name') or record.get('name', 'Unknown'),
-                            'status': 'ABSENT',
-                            'time': None,
-                            'room': None,
-                            'method': 'MANUAL',
-                            'timestamp': record.get('timestamp'),
-                            'subject': None,
-                            'session_time': None
-                        })
+            # Apply filters
+            if date and session_date != date:
+                continue
+            if room and session_room != room:
+                continue
+            if group and session_group != group:
+                continue
+            
+            # Get session details for more context
+            session_details = None
+            if session_date in all_sessions:
+                date_sessions = all_sessions.get(session_date, {})
+                if isinstance(date_sessions, dict) and session_room in date_sessions:
+                    room_sessions = date_sessions.get(session_room, [])
+                    if isinstance(room_sessions, list):
+                        for session in room_sessions:
+                            if isinstance(session, dict) and session.get('session_id') == session_id:
+                                session_details = session
+                                break
+            
+            # Process present students
+            present_data = attendance_record.get('present', {})
+            if isinstance(present_data, dict):
+                for stud_id, record in present_data.items():
+                    if not isinstance(record, dict):
+                        continue
+                    
+                    if student_id and stud_id != student_id:
+                        continue
+                    
+                    # Get student info
+                    student_data = firebase.get_one('students', stud_id) or {}
+                    
+                    # Get subject name
+                    subject_name = None
+                    if session_details and session_details.get('subject'):
+                        subject_code = session_details.get('subject')
+                        subject_name = all_subjects.get(subject_code, {}).get('name', subject_code)
+                    
+                    filtered_attendance.append({
+                        'date': session_date,
+                        'session_id': session_id,
+                        'group_id': session_group,
+                        'group_name': get_group_name(session_group),
+                        'student_id': stud_id,
+                        'student_name': student_data.get('name') or record.get('name', 'Unknown'),
+                        'status': 'PRESENT',
+                        'time': record.get('time'),
+                        'room': session_room,
+                        'room_name': get_room_name(session_room),
+                        'method': 'FINGERPRINT',
+                        'session_start': session_time,
+                        'session_end': session_details.get('end') if session_details else None,
+                        'subject': session_details.get('subject') if session_details else None,
+                        'subject_name': subject_name
+                    })
+            
+            # Process absent students
+            absent_data = attendance_record.get('absent', {})
+            if isinstance(absent_data, dict):
+                for stud_id, record in absent_data.items():
+                    if not isinstance(record, dict):
+                        continue
+                    
+                    if student_id and stud_id != student_id:
+                        continue
+                    
+                    # Get student info
+                    student_data = firebase.get_one('students', stud_id) or {}
+                    
+                    # Get subject name
+                    subject_name = None
+                    if session_details and session_details.get('subject'):
+                        subject_code = session_details.get('subject')
+                        subject_name = all_subjects.get(subject_code, {}).get('name', subject_code)
+                    
+                    filtered_attendance.append({
+                        'date': session_date,
+                        'session_id': session_id,
+                        'group_id': session_group,
+                        'group_name': get_group_name(session_group),
+                        'student_id': stud_id,
+                        'student_name': student_data.get('name') or record.get('name', 'Unknown'),
+                        'status': 'ABSENT',
+                        'time': None,
+                        'room': session_room,
+                        'room_name': get_room_name(session_room),
+                        'method': 'MANUAL',
+                        'session_start': session_time,
+                        'session_end': session_details.get('end') if session_details else None,
+                        'subject': session_details.get('subject') if session_details else None,
+                        'subject_name': subject_name
+                    })
         
         # Sort by date (descending) and time (descending)
         filtered_attendance.sort(key=lambda x: (
             x.get('date', ''),
-            x.get('time', '') if x.get('time') else '00:00'
+            x.get('session_start', '')
         ), reverse=True)
         
         return jsonify({
@@ -283,8 +182,10 @@ def get_attendance():
 def get_attendance_by_group_date(group_id, date):
     """Get attendance for specific group and date"""
     try:
-        # Get attendance data
-        attendance_data = firebase.get_one('attendance', f'{group_id}/{date}') or {}
+        # Get all attendance data
+        all_attendance = firebase.get_all('attendance') or {}
+        all_sessions = firebase.get_all('sessions') or {}
+        all_subjects = firebase.get_all('subjects') or {}
         
         # Get group info
         group_data = firebase.get_one('groups', group_id) or {}
@@ -303,8 +204,7 @@ def get_attendance_by_group_date(group_id, date):
         result = {
             'date': date,
             'group': group_data,
-            'present': [],
-            'absent': [],
+            'sessions': [],
             'students': group_students,
             'summary': {
                 'total_students': len(group_students),
@@ -314,51 +214,84 @@ def get_attendance_by_group_date(group_id, date):
             }
         }
         
-        # Process present students
-        present_data = attendance_data.get('present', {})
-        if isinstance(present_data, dict):
-            for stud_id, record in present_data.items():
-                if isinstance(record, dict):
-                    student_info = firebase.get_one('students', stud_id) or {}
-                    result['present'].append({
-                        'student_id': stud_id,
-                        **student_info,
-                        'attendance_info': record
-                    })
+        # Find attendance records for this group and date
+        for session_id, attendance_record in all_attendance.items():
+            if not isinstance(attendance_record, dict):
+                continue
+            
+            # Parse session_id
+            session_date, session_room, session_time, session_group = parse_session_id(session_id)
+            if session_date != date or session_group != group_id:
+                continue
+            
+            # Get session details
+            session_details = None
+            if date in all_sessions:
+                date_sessions = all_sessions.get(date, {})
+                if isinstance(date_sessions, dict) and session_room in date_sessions:
+                    room_sessions = date_sessions.get(session_room, [])
+                    if isinstance(room_sessions, list):
+                        for session in room_sessions:
+                            if isinstance(session, dict) and session.get('session_id') == session_id:
+                                session_details = session
+                                break
+            
+            # Get subject name
+            subject_name = None
+            if session_details and session_details.get('subject'):
+                subject_code = session_details.get('subject')
+                subject_name = all_subjects.get(subject_code, {}).get('name', subject_code)
+            
+            # Get present and absent lists
+            present_list = []
+            absent_list = []
+            
+            present_data = attendance_record.get('present', {})
+            if isinstance(present_data, dict):
+                for stud_id, record in present_data.items():
+                    if isinstance(record, dict):
+                        student_info = firebase.get_one('students', stud_id) or {}
+                        present_list.append({
+                            'student_id': stud_id,
+                            'name': student_info.get('name', record.get('name', 'Unknown')),
+                            'time': record.get('time')
+                        })
+            
+            absent_data = attendance_record.get('absent', {})
+            if isinstance(absent_data, dict):
+                for stud_id, record in absent_data.items():
+                    if isinstance(record, dict):
+                        student_info = firebase.get_one('students', stud_id) or {}
+                        absent_list.append({
+                            'student_id': stud_id,
+                            'name': student_info.get('name', record.get('name', 'Unknown'))
+                        })
+            
+            session_info = {
+                'session_id': session_id,
+                'room': session_room,
+                'room_name': get_room_name(session_room),
+                'start_time': session_time,
+                'end_time': session_details.get('end') if session_details else None,
+                'subject': session_details.get('subject') if session_details else None,
+                'subject_name': subject_name,
+                'status': session_details.get('status') if session_details else None,
+                'present': present_list,
+                'absent': absent_list,
+                'present_count': len(present_list),
+                'absent_count': len(absent_list)
+            }
+            
+            result['sessions'].append(session_info)
+            result['summary']['total_present'] += len(present_list)
+            result['summary']['total_absent'] += len(absent_list)
         
-        # Process absent students
-        absent_data = attendance_data.get('absent', {})
-        if isinstance(absent_data, dict):
-            for stud_id, record in absent_data.items():
-                if isinstance(record, dict):
-                    student_info = firebase.get_one('students', stud_id) or {}
-                    result['absent'].append({
-                        'student_id': stud_id,
-                        **student_info,
-                        'attendance_info': record
-                    })
-        
-        # Calculate summary
-        total_present = len(result['present'])
-        total_absent = len(result['absent'])
-        total_students = len(group_students)
-        
-        # If we have absent records, adjust total
-        if total_absent > 0:
-            total_counted = total_present + total_absent
-            # Use whichever is larger: actual group count or counted attendance
-            total_students = max(total_students, total_counted)
-        
-        attendance_rate = 0
-        if total_students > 0:
-            attendance_rate = round((total_present / total_students) * 100, 2)
-        
-        result['summary'] = {
-            'total_students': total_students,
-            'total_present': total_present,
-            'total_absent': total_absent,
-            'attendance_rate': attendance_rate
-        }
+        # Calculate attendance rate
+        total_counted = result['summary']['total_present'] + result['summary']['total_absent']
+        if total_counted > 0:
+            result['summary']['attendance_rate'] = round(
+                (result['summary']['total_present'] / total_counted) * 100, 2
+            )
         
         return jsonify({
             'success': True,
@@ -384,57 +317,106 @@ def get_attendance_by_student(student_id):
         
         # Get all attendance data
         all_attendance = firebase.get_all('attendance') or {}
+        all_sessions = firebase.get_all('sessions') or {}
+        all_subjects = firebase.get_all('subjects') or {}
         student_attendance = []
         
-        # Check if the group exists in attendance
-        if group_id in all_attendance:
-            group_attendance = all_attendance[group_id]
+        # Search for student in all attendance records
+        for session_id, attendance_record in all_attendance.items():
+            if not isinstance(attendance_record, dict):
+                continue
             
-            for date_str, status_data in group_attendance.items():
-                # Filter by date
-                if start_date and date_str < start_date:
-                    continue
-                if end_date and date_str > end_date:
-                    continue
-                
-                # Check present list
-                present_data = status_data.get('present', {})
-                if student_id in present_data:
-                    record = present_data[student_id]
-                    student_attendance.append({
-                        'date': date_str,
-                        'group_id': group_id,
-                        'status': 'PRESENT',
-                        'time': record.get('time'),
-                        'room': record.get('room'),
-                        'method': 'FINGERPRINT',
-                        'timestamp': record.get('timestamp'),
-                        'subject': record.get('session_subject'),
-                        'session_time': record.get('session_time')
-                    })
-                # Check absent list
-                elif student_id in status_data.get('absent', {}):
-                    record = status_data['absent'][student_id]
-                    student_attendance.append({
-                        'date': date_str,
-                        'group_id': group_id,
-                        'status': 'ABSENT',
-                        'time': None,
-                        'room': None,
-                        'method': 'MANUAL',
-                        'timestamp': record.get('timestamp'),
-                        'subject': None,
-                        'session_time': None
-                    })
+            # Parse session_id to get date and group
+            session_date, session_room, session_time, session_group = parse_session_id(session_id)
+            if not session_date:
+                continue
+            
+            # Filter by date range
+            if start_date and session_date < start_date:
+                continue
+            if end_date and session_date > end_date:
+                continue
+            
+            # Filter by student's group (optional, but good for validation)
+            if session_group != group_id:
+                continue
+            
+            # Get session details
+            session_details = None
+            if session_date in all_sessions:
+                date_sessions = all_sessions.get(session_date, {})
+                if isinstance(date_sessions, dict) and session_room in date_sessions:
+                    room_sessions = date_sessions.get(session_room, [])
+                    if isinstance(room_sessions, list):
+                        for session in room_sessions:
+                            if isinstance(session, dict) and session.get('session_id') == session_id:
+                                session_details = session
+                                break
+            
+            # Get subject name
+            subject_name = None
+            if session_details and session_details.get('subject'):
+                subject_code = session_details.get('subject')
+                subject_name = all_subjects.get(subject_code, {}).get('name', subject_code)
+            
+            # Check present list
+            present_data = attendance_record.get('present', {})
+            if student_id in present_data:
+                record = present_data[student_id]
+                student_attendance.append({
+                    'date': session_date,
+                    'session_id': session_id,
+                    'group_id': session_group,
+                    'group_name': get_group_name(session_group),
+                    'status': 'PRESENT',
+                    'time': record.get('time'),
+                    'room': session_room,
+                    'room_name': get_room_name(session_room),
+                    'session_start': session_time,
+                    'session_end': session_details.get('end') if session_details else None,
+                    'subject': session_details.get('subject') if session_details else None,
+                    'subject_name': subject_name
+                })
+            # Check absent list
+            elif student_id in attendance_record.get('absent', {}):
+                record = attendance_record['absent'][student_id]
+                student_attendance.append({
+                    'date': session_date,
+                    'session_id': session_id,
+                    'group_id': session_group,
+                    'group_name': get_group_name(session_group),
+                    'status': 'ABSENT',
+                    'time': None,
+                    'room': session_room,
+                    'room_name': get_room_name(session_room),
+                    'session_start': session_time,
+                    'session_end': session_details.get('end') if session_details else None,
+                    'subject': session_details.get('subject') if session_details else None,
+                    'subject_name': subject_name
+                })
         
         # Sort by date (descending)
         student_attendance.sort(key=lambda x: x.get('date', ''), reverse=True)
+        
+        # Calculate stats
+        total_sessions = len(student_attendance)
+        present_sessions = sum(1 for a in student_attendance if a['status'] == 'PRESENT')
+        absent_sessions = sum(1 for a in student_attendance if a['status'] == 'ABSENT')
+        attendance_rate = 0
+        if total_sessions > 0:
+            attendance_rate = round((present_sessions / total_sessions) * 100, 2)
         
         return jsonify({
             'success': True,
             'student': student_data,
             'data': student_attendance,
-            'count': len(student_attendance)
+            'count': len(student_attendance),
+            'stats': {
+                'total_sessions': total_sessions,
+                'present': present_sessions,
+                'absent': absent_sessions,
+                'attendance_rate': attendance_rate
+            }
         })
     except Exception as e:
         print(f"Error getting attendance by student: {e}")
@@ -449,101 +431,65 @@ def check_today_attendance(student_id):
         if not student_data:
             return jsonify({'success': False, 'error': 'Student not found'}), 404
         
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = datetime.now().strftime('%Y%m%d')
+        formatted_today = datetime.now().strftime('%Y-%m-%d')
         group_id = student_data.get('group')
         
-        # Get today's attendance for student's group
-        today_attendance_path = f'attendance/{group_id}/{today}'
-        today_attendance = firebase.get_one('attendance', today_attendance_path) or {}
+        # Get all attendance data
+        all_attendance = firebase.get_all('attendance') or {}
+        attendance_records = []
         
-        # Check if student is present
-        present_data = today_attendance.get('present', {})
-        has_attendance_today = student_id in present_data
-        attendance_record = present_data.get(student_id) if has_attendance_today else None
+        # Search for today's attendance records for this student
+        for session_id, attendance_record in all_attendance.items():
+            if not isinstance(attendance_record, dict):
+                continue
+            
+            # Parse session_id to get date and group
+            session_date_str = session_id.split('_')[0] if '_' in session_id else ''
+            if session_date_str != today:
+                continue
+            
+            session_date, session_room, session_time, session_group = parse_session_id(session_id)
+            if session_group != group_id:
+                continue
+            
+            # Check present list
+            present_data = attendance_record.get('present', {})
+            if student_id in present_data:
+                record = present_data[student_id]
+                attendance_records.append({
+                    'session_id': session_id,
+                    'status': 'PRESENT',
+                    'time': record.get('time'),
+                    'room': session_room,
+                    'room_name': get_room_name(session_room),
+                    'session_time': session_time
+                })
+            # Check absent list
+            elif student_id in attendance_record.get('absent', {}):
+                record = attendance_record['absent'][student_id]
+                attendance_records.append({
+                    'session_id': session_id,
+                    'status': 'ABSENT',
+                    'room': session_room,
+                    'room_name': get_room_name(session_room),
+                    'session_time': session_time
+                })
         
-        # Check if student is absent
-        absent_data = today_attendance.get('absent', {})
-        is_absent = student_id in absent_data
+        has_attendance_today = len(attendance_records) > 0
+        is_absent = any(record['status'] == 'ABSENT' for record in attendance_records)
         
         return jsonify({
             'success': True,
             'student': student_data,
             'has_attendance_today': has_attendance_today,
             'is_absent': is_absent,
-            'attendance_record': attendance_record,
-            'date': today,
+            'attendance_records': attendance_records,
+            'date': formatted_today,
             'group_id': group_id
         })
     except Exception as e:
         print(f"Error checking today's attendance: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@attendance_bp.route('/api/attendance/mark-absent', methods=['POST'])
-def mark_absent():
-    """Manually mark a student as absent"""
-    try:
-        data = request.get_json()
-        
-        required_fields = ['student_id', 'date', 'group_id']
-        if not all(field in data for field in required_fields):
-            return jsonify({
-                'success': False,
-                'error': f'Required fields: {required_fields}'
-            }), 400
-        
-        student_id = data['student_id']
-        date = data['date']
-        group_id = data['group_id']
-        
-        # Check if student exists
-        student_data = firebase.get_one('students', student_id)
-        if not student_data:
-            return jsonify({'success': False, 'error': 'Student not found'}), 404
-        
-        # Check if group exists
-        group_data = firebase.get_one('groups', group_id)
-        if not group_data:
-            return jsonify({'success': False, 'error': 'Group not found'}), 404
-        
-        # Check if student is already marked absent
-        absent_path = f'attendance/{group_id}/{date}/absent/{student_id}'
-        existing_absent = firebase.get_one('attendance', absent_path)
-        if existing_absent:
-            return jsonify({
-                'success': True,
-                'message': 'Student already marked absent',
-                'already_marked': True
-            })
-        
-        # Check if student is marked present and remove from present
-        present_path = f'attendance/{group_id}/{date}/present/{student_id}'
-        existing_present = firebase.get_one('attendance', present_path)
-        if existing_present:
-            firebase.delete('attendance', f'{group_id}/{date}/present/{student_id}')
-        
-        # Mark as absent
-        absent_data = {
-            'name': student_data.get('name'),
-            'timestamp': datetime.now().isoformat(),
-            'marked_by': data.get('marked_by', 'admin'),
-            'reason': data.get('reason', '')
-        }
-        
-        firebase.update('attendance', f'{group_id}/{date}/absent/{student_id}', absent_data)
-        
-        return jsonify({
-            'success': True,
-            'message': 'Student marked as absent',
-            'data': {
-                'student_id': student_id,
-                'name': student_data.get('name'),
-                'date': date,
-                'group_id': group_id,
-                'group_name': group_data.get('name', group_id)
-            }
-        })
-    except Exception as e:
-        print(f"Error marking absent: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @attendance_bp.route('/api/attendance/stats', methods=['GET'])
@@ -559,6 +505,9 @@ def get_attendance_stats():
         else:
             target_date = datetime.now().strftime('%Y-%m-%d')
         
+        # Convert date to YYYYMMDD format for session_id matching
+        target_date_compact = target_date.replace('-', '')
+        
         stats = {
             'date': target_date,
             'total_students': 0,
@@ -570,6 +519,8 @@ def get_attendance_stats():
         
         # Get all groups
         all_groups = firebase.get_all('groups') or {}
+        all_attendance = firebase.get_all('attendance') or {}
+        all_students = firebase.get_all('students') or {}
         
         for group_key, group_data in all_groups.items():
             if group_id and group_key != group_id:
@@ -577,29 +528,42 @@ def get_attendance_stats():
             
             # Get students in this group
             group_students = []
-            all_students = firebase.get_all('students') or {}
             for student_key, student in all_students.items():
                 if isinstance(student, dict) and student.get('group') == group_key:
                     group_students.append(student_key)
             
-            # Get attendance for this group on the specified date
-            attendance_path = f'attendance/{group_key}/{target_date}'
-            group_attendance = firebase.get_one('attendance', attendance_path) or {}
-            
+            # Count attendance for this group on the specified date
             present_count = 0
-            present_data = group_attendance.get('present', {})
-            if isinstance(present_data, dict):
-                present_count = len(present_data)
-            
             absent_count = 0
-            absent_data = group_attendance.get('absent', {})
-            if isinstance(absent_data, dict):
-                absent_count = len(absent_data)
+            
+            # Find attendance records for this group and date
+            for session_id, attendance_record in all_attendance.items():
+                if not isinstance(attendance_record, dict):
+                    continue
+                
+                # Parse session_id
+                session_date_str = session_id.split('_')[0] if '_' in session_id else ''
+                if session_date_str != target_date_compact:
+                    continue
+                
+                session_date, _, _, session_group = parse_session_id(session_id)
+                if session_group != group_key:
+                    continue
+                
+                # Count present
+                present_data = attendance_record.get('present', {})
+                if isinstance(present_data, dict):
+                    present_count += len(present_data)
+                
+                # Count absent
+                absent_data = attendance_record.get('absent', {})
+                if isinstance(absent_data, dict):
+                    absent_count += len(absent_data)
             
             total_students = len(group_students)
-            
-            # If we have attendance records, use the higher count
             total_counted = present_count + absent_count
+            
+            # Use the higher count between group students and counted attendance
             if total_counted > total_students:
                 total_students = total_counted
             
@@ -612,8 +576,7 @@ def get_attendance_stats():
                 'total_students': total_students,
                 'present': present_count,
                 'absent': absent_count,
-                'attendance_rate': attendance_rate,
-                'present_percentage': attendance_rate
+                'attendance_rate': attendance_rate
             }
             
             stats['total_students'] += total_students
@@ -636,57 +599,98 @@ def get_attendance_stats():
 def get_today_attendance_for_room(room_id):
     """Get today's attendance for a specific room"""
     try:
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = datetime.now().strftime('%Y%m%d')
+        formatted_today = datetime.now().strftime('%Y-%m-%d')
         
         # Check if room exists
         room_data = firebase.get_one('rooms', room_id)
         if not room_data:
             return jsonify({'success': False, 'error': 'Room not found'}), 404
         
-        # Get sessions for today in this room
-        sessions_path = f'sessions/{today}/{room_id}'
-        room_sessions = firebase.get_one('sessions', sessions_path) or {}
-        
+        # Get all attendance data
+        all_attendance = firebase.get_all('attendance') or {}
+        all_sessions = firebase.get_all('sessions') or {}
         attendance_records = []
         
-        # For each session, get attendance
-        for session_key, session_data in room_sessions.items():
-            if not isinstance(session_data, dict):
+        # Find attendance records for today and this room
+        for session_id, attendance_record in all_attendance.items():
+            if not isinstance(attendance_record, dict):
                 continue
             
-            group_id = session_data.get('group')
-            if not group_id:
+            # Parse session_id
+            session_date_str = session_id.split('_')[0] if '_' in session_id else ''
+            if session_date_str != today:
                 continue
             
-            # Get attendance for this group today
-            attendance_path = f'attendance/{group_id}/{today}'
-            group_attendance = firebase.get_one('attendance', attendance_path) or {}
+            session_date, session_room, session_time, session_group = parse_session_id(session_id)
+            if session_room != room_id:
+                continue
+            
+            # Get session details
+            session_details = None
+            if session_date in all_sessions:
+                date_sessions = all_sessions.get(session_date, {})
+                if isinstance(date_sessions, dict) and session_room in date_sessions:
+                    room_sessions = date_sessions.get(session_room, [])
+                    if isinstance(room_sessions, list):
+                        for session in room_sessions:
+                            if isinstance(session, dict) and session.get('session_id') == session_id:
+                                session_details = session
+                                break
             
             # Process present students
-            present_data = group_attendance.get('present', {})
+            present_data = attendance_record.get('present', {})
             for student_id, attendance_info in present_data.items():
                 if not isinstance(attendance_info, dict):
                     continue
                 
-                # Check if this attendance is for this room
-                if attendance_info.get('room_id') == room_id:
-                    student_data = firebase.get_one('students', student_id) or {}
-                    
-                    attendance_records.append({
-                        'session': session_data,
-                        'student_id': student_id,
-                        'student_name': student_data.get('name'),
-                        'attendance_time': attendance_info.get('time'),
-                        'status': 'PRESENT',
-                        'fingerprint_id': attendance_info.get('fingerprint_id')
-                    })
+                student_data = firebase.get_one('students', student_id) or {}
+                
+                attendance_records.append({
+                    'session_id': session_id,
+                    'group': session_group,
+                    'group_name': get_group_name(session_group),
+                    'student_id': student_id,
+                    'student_name': student_data.get('name', 'Unknown'),
+                    'attendance_time': attendance_info.get('time'),
+                    'status': 'PRESENT',
+                    'session_time': session_time,
+                    'session_end': session_details.get('end') if session_details else None,
+                    'subject': session_details.get('subject') if session_details else None
+                })
+            
+            # Process absent students
+            absent_data = attendance_record.get('absent', {})
+            for student_id, attendance_info in absent_data.items():
+                if not isinstance(attendance_info, dict):
+                    continue
+                
+                student_data = firebase.get_one('students', student_id) or {}
+                
+                attendance_records.append({
+                    'session_id': session_id,
+                    'group': session_group,
+                    'group_name': get_group_name(session_group),
+                    'student_id': student_id,
+                    'student_name': student_data.get('name', 'Unknown'),
+                    'attendance_time': None,
+                    'status': 'ABSENT',
+                    'session_time': session_time,
+                    'session_end': session_details.get('end') if session_details else None,
+                    'subject': session_details.get('subject') if session_details else None
+                })
         
         return jsonify({
             'success': True,
             'room': room_data,
-            'date': today,
+            'date': formatted_today,
             'attendance': attendance_records,
-            'count': len(attendance_records)
+            'count': len(attendance_records),
+            'summary': {
+                'present': sum(1 for r in attendance_records if r['status'] == 'PRESENT'),
+                'absent': sum(1 for r in attendance_records if r['status'] == 'ABSENT'),
+                'sessions': len(set(r['session_id'] for r in attendance_records))
+            }
         })
     except Exception as e:
         print(f"Error getting today's attendance for room: {e}")
